@@ -1,0 +1,11 @@
+<?php
+return [
+    // Absolute path to the directory of TikTok DDP JSON files (read-only).
+    'ddp_dir'         => '/absolute/path/to/tiktok/ddp/files',
+    // Optional: sharded transcript tree (<last-2-digits>/<id>.txt|.json), or null.
+    'transcripts_dir' => null,
+    // Default sample size per section.
+    'default_n'       => 15,
+    // URL prefix when served behind a reverse-proxy subpath (e.g. '/inspector'); '' at root.
+    'base_path'       => '',
+];
