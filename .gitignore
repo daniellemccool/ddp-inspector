@@ -1,0 +1,10 @@
+# Local config with environment-specific (and possibly sensitive) paths
+config.php
+
+# Optional runtime stats cache
+.cache/
+
+# Never commit donor data
+*-tiktok.json
+inbox/
+transcripts/
