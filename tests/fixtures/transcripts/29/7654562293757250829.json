@@ -1,0 +1,12 @@
+{
+  "model": "small",
+  "language": "en",
+  "transcribed_at": "2026-07-05T12:00:00Z",
+  "raw_signals": {
+    "schema_version": 1,
+    "segments": [
+      {"text": "Hello world", "tokens": [{"text": "Hello", "p": 0.98}, {"text": "world", "p": 0.91}]},
+      {"text": "this is a test", "tokens": [{"text": "this", "p": 0.42}, {"text": "[_TT_]", "p": 0.99}]}
+    ]
+  }
+}
