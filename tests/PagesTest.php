@@ -40,7 +40,7 @@ check(str_contains($ok, 'Hello world this is a test'), 'transcript text rendered
 check(str_contains($ok, '0.42') || str_contains($ok, 'low'), 'low-confidence segment surfaced');
 
 $none = render_page('transcript.php', ['vid' => '1111111111111111111']);
-check(str_contains($none, 'not transcribed'), 'missing transcript -> not transcribed');
+check(str_contains(strtolower($none), 'not transcribed'), 'missing transcript -> not transcribed');
 
 $bad = render_page('transcript.php', ['vid' => '../etc/passwd']);
 check(str_contains($bad, '400') || str_contains($bad, 'invalid'), 'bad vid rejected');

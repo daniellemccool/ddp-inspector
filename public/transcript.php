@@ -32,9 +32,10 @@ $seg_avg = function (array $seg): ?float {
 <title>transcript <?= h($vid) ?></title>
 <link rel="stylesheet" href="<?= h(url('assets/style.css')) ?>">
 <main class="wrap">
+  <p><a href="<?= h(url('index.php')) ?>">← all participants</a></p>
   <h1>transcript <?= h($vid) ?></h1>
   <?php if ($txt === null && $meta === null): ?>
-    <p class="notice">not transcribed yet.</p>
+    <p class="notice">Not transcribed yet.</p>
   <?php else: ?>
     <pre class="transcript"><?= h((string)$txt) ?></pre>
     <?php $segs = $meta['raw_signals']['segments'] ?? null; if (is_array($segs)): ?>

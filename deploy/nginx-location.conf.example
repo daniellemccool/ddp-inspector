@@ -1,0 +1,18 @@
+# DDP Inspector behind the SURF Research Cloud nginx + SRAM component.
+# Add to /etc/nginx/app-location-conf.d/authentication.conf and reload nginx.
+# Assumes php-fpm listening on 127.0.0.1:9000 and docroot at /opt/ddp-inspector/public.
+location /inspector/ {
+    error_page 401 = @custom_401;
+    auth_request /validate;                       # SRAM login, CO members only
+    auth_request_set $username $upstream_http_username;
+
+    alias /opt/ddp-inspector/public/;
+    index index.php;
+
+    location ~ ^/inspector/(.+\.php)$ {
+        include fastcgi_params;
+        fastcgi_pass 127.0.0.1:9000;
+        fastcgi_param SCRIPT_FILENAME /opt/ddp-inspector/public/$1;
+    }
+}
+# Set 'base_path' => '/inspector' in config.php so links resolve behind the subpath.
