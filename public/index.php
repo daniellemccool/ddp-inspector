@@ -1,5 +1,12 @@
 <?php
 require_once __DIR__ . '/../src/bootstrap.php';
+
+if (!cfg_ready()) {
+    http_response_code(500);
+    echo 'Configuration missing. Copy config.php.example to config.php.';
+    return;
+}
+
 $loaded = ddp_load_dir((string)cfg('ddp_dir'));
 ?>
 <!doctype html>

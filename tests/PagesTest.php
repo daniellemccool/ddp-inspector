@@ -44,3 +44,11 @@ check(str_contains(strtolower($none), 'not transcribed'), 'missing transcript ->
 
 $bad = render_page('transcript.php', ['vid' => '../etc/passwd']);
 check(str_contains($bad, '400') || str_contains($bad, 'invalid'), 'bad vid rejected');
+
+// --- config-missing path ---
+$__saved_cfg = $GLOBALS['__cfg'];
+$GLOBALS['__cfg'] = null;
+$missingCfg = render_page('index.php', []);
+check(str_contains($missingCfg, 'Configuration missing'), 'missing config shows friendly message');
+check(!str_contains($missingCfg, '<table'), 'missing config does not render the participant table');
+$GLOBALS['__cfg'] = $__saved_cfg;

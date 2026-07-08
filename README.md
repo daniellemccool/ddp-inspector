@@ -8,6 +8,8 @@ researcher can verify that donations match expectations.
 Companion to the `ddp-transcribe` pipeline; **not** part of it. See the design spec
 in `docs/superpowers/specs/` and the plan in `docs/superpowers/plans/`.
 
+Requires **PHP ≥ 8.1** (uses `array_is_list`).
+
 ## Run locally
 ```bash
 cp config.php.example config.php   # set ddp_dir to your DDP JSON directory

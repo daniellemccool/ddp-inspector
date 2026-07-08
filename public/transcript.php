@@ -1,8 +1,14 @@
 <?php
 require_once __DIR__ . '/../src/bootstrap.php';
 
-$vid = (string)($_GET['vid'] ?? '');
-if (!preg_match('/^\d{19}$/', $vid)) {
+if (!cfg_ready()) {
+    http_response_code(500);
+    echo 'Configuration missing. Copy config.php.example to config.php.';
+    return;
+}
+
+$vid = is_string($_GET['vid'] ?? null) ? $_GET['vid'] : '';
+if (!preg_match('/^\d{19}$/D', $vid)) {
     http_response_code(400);
     echo '<!doctype html><title>Bad request</title><p>Invalid video id (400).</p>';
     return;
@@ -37,7 +43,11 @@ $seg_avg = function (array $seg): ?float {
   <?php if ($txt === null && $meta === null): ?>
     <p class="notice">Not transcribed yet.</p>
   <?php else: ?>
-    <pre class="transcript"><?= h((string)$txt) ?></pre>
+    <?php if ($txt !== null): ?>
+      <pre class="transcript"><?= h((string)$txt) ?></pre>
+    <?php else: ?>
+      <p class="notice">(transcript text file missing)</p>
+    <?php endif; ?>
     <?php $segs = $meta['raw_signals']['segments'] ?? null; if (is_array($segs)): ?>
       <h2>Segment confidence</h2>
       <table class="rows">

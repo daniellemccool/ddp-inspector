@@ -161,3 +161,9 @@ ddp-inspector/
 - **Stats cache** — deferred; on-demand parsing suffices at pilot scale. Add if participant count makes the index page slow.
 - **Static "bake" export** — a per-participant offline HTML export was considered (Approach B during design) and set aside for the security footprint; can be added later as a strict subset of the render logic if offline copies are ever needed.
 - **Comment↔video temporal heuristic** — explicitly declined; the association is not in the data and a timestamp guess would be misleading.
+
+## Deviations from spec (accepted during implementation)
+
+- The index page shows summary counts (total rows, unique videos, overall date
+  range) rather than per-section counts; per-section counts live on the
+  participant page. Accepted by decision to keep the index lean.

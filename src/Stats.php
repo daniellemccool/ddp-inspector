@@ -50,13 +50,11 @@ function stats_unique_video_count(array $sections): int {
 function stats_participant_scope(array $participant): array {
     $sections = $participant['sections'];
     $ordered = [];
-    $names = array_merge(
-        array_values(array_filter(DDP_SECTION_ORDER, fn($n) => isset($sections[$n]))),
-        array_values(array_filter(array_keys($sections), fn($n) => !in_array($n, DDP_SECTION_ORDER, true)))
-    );
+    $extras = array_values(array_filter(array_keys($sections), fn($n) => !in_array($n, DDP_SECTION_ORDER, true)));
+    $names = array_merge(DDP_SECTION_ORDER, $extras);
     $total = 0; $earliest = null; $latest = null;
     foreach ($names as $name) {
-        $s = stats_section_summary($sections[$name]);
+        $s = stats_section_summary($sections[$name] ?? []);
         $ordered[$name] = $s;
         $total += $s['count'];
         if ($s['earliest'] !== null && ($earliest === null || $s['earliest'] < $earliest)) { $earliest = $s['earliest']; }

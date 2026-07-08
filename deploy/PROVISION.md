@@ -1,7 +1,7 @@
 # Provisioning DDP Inspector in a SURF Research Cloud workspace
 
 ## Prerequisites (Ansible playbook additions)
-- Install PHP: `package: { name: [php-fpm, php-cli] }`
+- Install PHP: `package: { name: [php-fpm, php-cli] }`. Requires **PHP ≥ 8.1** (the app uses `array_is_list`); check the distro's default package version before installing.
 - Enable php-fpm: `service: { name: php-fpm, state: started, enabled: true }`
 
 ## Deploy

@@ -1,9 +1,15 @@
 <?php
 require_once __DIR__ . '/../src/bootstrap.php';
 
-$id   = (string)($_GET['id'] ?? '');
-$seed = max(1, (int)($_GET['seed'] ?? 1));
-$n    = max(1, (int)($_GET['n'] ?? cfg('default_n', 15)));
+if (!cfg_ready()) {
+    http_response_code(500);
+    echo 'Configuration missing. Copy config.php.example to config.php.';
+    return;
+}
+
+$id   = is_string($_GET['id'] ?? null) ? $_GET['id'] : '';
+$seed = max(1, (int)(is_scalar($_GET['seed'] ?? null) ? $_GET['seed'] : 1));
+$n    = max(1, (int)(is_scalar($_GET['n'] ?? null) ? $_GET['n'] : cfg('default_n', 15)));
 
 $loaded = ddp_load_dir((string)cfg('ddp_dir'));
 $participant = $loaded['participants'][$id] ?? null;
@@ -35,8 +41,14 @@ $scope = stats_participant_scope($participant);
     </tbody>
   </table>
 
+  <p class="samplesize">sample size:
+    <?php foreach ([10, 15, 20, 50] as $opt): ?>
+      <a href="<?= h(url('participant.php?id=' . rawurlencode($id) . '&n=' . $opt . '&seed=' . $seed)) ?>"<?= $opt === $n ? ' class="cur"' : '' ?>><?= $opt ?></a>
+    <?php endforeach; ?>
+  </p>
+
   <?php foreach ($scope['sections'] as $name => $s):
-      $rows = $participant['sections'][$name];
+      $rows = $participant['sections'][$name] ?? [];
       $sample = sample_rows($rows, $n, $seed, $name);
       $reshuffle = url('participant.php?id=' . rawurlencode($id) . '&n=' . $n . '&seed=' . ($seed + 1)); ?>
     <section>

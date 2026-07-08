@@ -26,3 +26,8 @@ $scope = stats_participant_scope($p1);
 eq($scope['sections']['tiktok_comments']['count'], 2, 'scope comments count');
 eq(array_key_first($scope['sections']), 'tiktok_watch_history', 'scope ordered by DDP_SECTION_ORDER');
 eq($scope['unique_videos'], 4, 'scope unique videos');
+
+$noComments = ['sections' => ['tiktok_watch_history' => [['Date' => '2026-07-05 11:53:55', 'Link' => 'https://www.tiktokv.com/share/video/7654562293757250829/']]]];
+$scNo = stats_participant_scope($noComments);
+eq($scNo['sections']['tiktok_comments']['count'], 0, 'absent section still shown with count 0');
+eq(count(array_intersect(DDP_SECTION_ORDER, array_keys($scNo['sections']))), 5, 'all five canonical sections present even when absent from data');
