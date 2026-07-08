@@ -8,3 +8,8 @@ config.php
 *-tiktok.json
 inbox/
 transcripts/
+
+# Synthetic test fixtures must be committed despite the donor-data patterns above
+!tests/fixtures/
+!tests/fixtures/**/
+!tests/fixtures/**

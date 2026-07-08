@@ -1,0 +1,20 @@
+[
+  {"deleted row count": 0, "tiktok_watch_history": [
+    {"Date": "2026-07-05 11:53:55", "Link": "https://www.tiktokv.com/share/video/7654562293757250829/"},
+    {"Date": "2026-06-30 09:12:00", "Link": "https://www.tiktokv.com/share/video/7640857640611925279/"},
+    {"Date": "2026-01-30 23:24:12", "Link": "https://www.tiktokv.com/share/video/7588657359338196254/"}
+  ]},
+  {"deleted row count": 0, "tiktok_favorite_videos": [
+    {"Date": "2026-07-05 11:41:49", "Link": "https://www.tiktokv.com/share/video/7658513515249929480/"}
+  ]},
+  {"deleted row count": 0, "tiktok_like_list": [
+    {"Date": "2026-06-27 19:16:39", "Link": "https://www.tiktokv.com/share/video/7654562293757250829/"}
+  ]},
+  {"deleted row count": 0, "tiktok_share_history": [
+    {"Date": "2026-01-07 00:28:13", "SharedContent": "share_video", "Link": "https://www.tiktokv.com/share/video/7588657359338196254/", "Method": "sms"}
+  ]},
+  {"deleted row count": 0, "tiktok_comments": [
+    {"Date": "2026-05-28 01:36:28 UTC", "Comment": "Igual estoy yo"},
+    {"Date": "2026-05-29 02:00:00 UTC", "Comment": "second comment"}
+  ]}
+]
