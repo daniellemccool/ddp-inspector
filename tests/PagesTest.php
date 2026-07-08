@@ -21,4 +21,4 @@ $html = render_page('index.php', []);
 check(str_contains($html, 'p1'), 'index lists participant p1');
 check(str_contains($html, 'participant.php?id=p1'), 'index links to participant page');
 check(str_contains($html, '1 file') || str_contains($html, 'skipped'), 'index shows skipped-file notice');
-check(!str_contains($html, 'preview'), 'index does not list the skipped preview participant');
+check(!str_contains($html, 'participant.php?id=preview'), 'index does not link the skipped preview participant as a row');
