@@ -22,15 +22,21 @@ if ($dir) {
     if (is_file($base . '.json')) { $meta = json_decode((string)file_get_contents($base . '.json'), true); }
 }
 
-/** Average token confidence for a segment, ignoring special [_...] tokens. */
-$seg_avg = function (array $seg): ?float {
-    $ps = [];
+/**
+ * Segment text + average token confidence, skipping special tokens
+ * ([_BEG_], [_TT_nnn], <|en|>, ...). The pipeline's raw_signals carries no
+ * segment-level text (ADR-0010 pass-through: consumers reconstruct from
+ * tokens); whisper token texts carry their own leading spaces.
+ */
+$seg_info = function (array $seg): array {
+    $ps = []; $text = '';
     foreach ($seg['tokens'] ?? [] as $t) {
-        $txt = (string)($t['text'] ?? '');
-        if ($txt !== '' && $txt[0] === '[') { continue; }
+        $tok = (string)($t['text'] ?? '');
+        if ($tok !== '' && ($tok[0] === '[' || str_starts_with($tok, '<|'))) { continue; }
+        $text .= $tok;
         if (isset($t['p'])) { $ps[] = (float)$t['p']; }
     }
-    return $ps ? array_sum($ps) / count($ps) : null;
+    return [$ps ? array_sum($ps) / count($ps) : null, trim($text)];
 };
 ?>
 <!doctype html>
@@ -53,10 +59,10 @@ $seg_avg = function (array $seg): ?float {
       <table class="rows">
         <thead><tr><th>avg p</th><th>segment</th></tr></thead>
         <tbody>
-        <?php foreach ($segs as $seg): $avg = $seg_avg($seg); ?>
+        <?php foreach ($segs as $seg): [$avg, $stext] = $seg_info($seg); ?>
           <tr><td class="num <?= ($avg !== null && $avg < 0.5) ? 'low' : '' ?>">
                 <?= $avg === null ? '—' : number_format($avg, 2) ?></td>
-              <td><?= h((string)($seg['text'] ?? '')) ?></td></tr>
+              <td><?= h($stext) ?></td></tr>
         <?php endforeach; ?>
         </tbody>
       </table>

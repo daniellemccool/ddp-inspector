@@ -38,6 +38,8 @@ check(str_contains($missing, 'not found') || str_contains($missing, '404'), 'unk
 $ok = render_page('transcript.php', ['vid' => '7654562293757250829']);
 check(str_contains($ok, 'Hello world this is a test'), 'transcript text rendered');
 check(str_contains($ok, '0.42') || str_contains($ok, 'low'), 'low-confidence segment surfaced');
+check(str_contains($ok, '<td>Hello world</td>'), 'segment text derived from tokens, marker tokens skipped');
+check(str_contains($ok, '<td>this is a test</td>'), 'derived segment text trimmed of leading token space');
 
 $none = render_page('transcript.php', ['vid' => '1111111111111111111']);
 check(str_contains(strtolower($none), 'not transcribed'), 'missing transcript -> not transcribed');

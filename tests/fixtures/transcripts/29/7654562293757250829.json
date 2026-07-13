@@ -1,12 +1,29 @@
 {
-  "model": "small",
-  "language": "en",
+  "video_id": "7654562293757250829",
+  "source_url": "https://www.tiktokv.com/share/video/7654562293757250829/",
+  "duration_s": 12.5,
+  "language_detected": "en",
   "transcribed_at": "2026-07-05T12:00:00Z",
+  "fetcher": "ytdlp",
+  "transcript_source": "whisper-rs",
+  "model": "small",
   "raw_signals": {
-    "schema_version": 1,
+    "schema_version": "1",
+    "language": "en",
+    "lang_probs": null,
     "segments": [
-      {"text": "Hello world", "tokens": [{"text": "Hello", "p": 0.98}, {"text": "world", "p": 0.91}]},
-      {"text": "this is a test", "tokens": [{"text": "this", "p": 0.42}, {"text": "[_TT_]", "p": 0.99}]}
+      {"no_speech_prob": 1.4850667e-12, "tokens": [
+        {"id": 50365, "text": "[_BEG_]", "p": 0.67741317, "plog": -0.38947392},
+        {"id": 15947, "text": "Hello", "p": 0.98, "plog": -0.0202},
+        {"id": 1002, "text": " world", "p": 0.91, "plog": -0.0943},
+        {"id": 50579, "text": "[_TT_214]", "p": 0.5225072, "plog": -0.6491165}
+      ]},
+      {"no_speech_prob": 2.1e-10, "tokens": [
+        {"id": 220, "text": " this", "p": 0.42, "plog": -0.8675},
+        {"id": 307, "text": " is", "p": 0.42, "plog": -0.8675},
+        {"id": 257, "text": " a", "p": 0.42, "plog": -0.8675},
+        {"id": 1500, "text": " test", "p": 0.42, "plog": -0.8675}
+      ]}
     ]
   }
 }
