@@ -1,0 +1,135 @@
+#!/usr/bin/env bash
+# test-preflight-autodetect.sh — hermetic tests for preflight's storage-volume
+# auto-detection (no SRC needed). Runs the real preflight role via a scratch
+# play, injecting fake mount tables (storage_mounts_source, WITH fstype) and a
+# temp data root (storage_data_root). Contract under test: the storage_path
+# INPUT (an SRC extra-var, which set_fact cannot override) resolves into the
+# storage_root FACT; exactly one BLOCK-DEVICE (ext4/xfs) mount qualifies;
+# fuse.* mounts (Research-Drive-by-Link) never qualify; no volume = loud fail.
+set -uo pipefail   # no -e: failures are counted and reported
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+PROV="$(dirname "$HERE")"
+PLAYBOOK="${PROV}/.venv/bin/ansible-playbook"
+[ -x "${PLAYBOOK}" ] || { echo "missing ${PLAYBOOK} — set up provisioning/.venv first" >&2; exit 2; }
+
+TMP="$(mktemp -d)"
+trap 'rm -rf "${TMP}"' EXIT
+
+FAIL=0
+check() { local desc="$1"; shift; if "$@" >/dev/null 2>&1; then echo "ok: ${desc}"; else echo "FAIL: ${desc}"; FAIL=$((FAIL+1)); fi; }
+
+DATA="${TMP}/data"
+NGINXDIR="${TMP}/nginx-conf.d"; mkdir -p "${NGINXDIR}"
+
+cat > "${TMP}/scratch.yaml" <<'PLAY'
+---
+- name: Preflight auto-detect scratch harness
+  hosts: 127.0.0.1
+  connection: local
+  gather_facts: false
+  vars:
+    inspector_base_path: "/inspector"
+    inspector_install_dir: "/opt/ddp-inspector"
+    inspector_service_user: "www-data"
+    inspector_service_group: "www-data"
+    # Skip the php/nginx environment asserts' real-system checks are fed
+    # by the harness (nginx_confdir points at a temp dir; php check is
+    # satisfied by the host having php or by preflight_skip_php below).
+  roles:
+    - role: preflight
+  tasks:
+    - name: Report resolved facts
+      ansible.builtin.debug:
+        msg: "RESOLVED storage_root=[{{ storage_root | default('') }}] inspector_root=[{{ inspector_root | default('') }}]"
+PLAY
+
+mounts() { # mounts <dir:fstype ...> -> -e JSON dict with fstype-carrying entries
+  local out first=1 spec d t
+  out='{"storage_mounts_source": ['
+  for spec in "$@"; do
+    d="${spec%%:*}"; t="${spec##*:}"
+    [ "${first}" -eq 1 ] || out+=","
+    out+="{\"mount\": \"${d}\", \"fstype\": \"${t}\"}"
+    first=0
+  done
+  printf '%s]}' "${out}"
+}
+
+run() { # run <case-log> <extra -e args...>
+  local log="$1"; shift
+  ANSIBLE_ROLES_PATH="${PROV}/roles" "${PLAYBOOK}" "${TMP}/scratch.yaml" \
+    -e "storage_data_root=${DATA}" -e "nginx_confdir=${NGINXDIR}" \
+    -e "preflight_skip_php=true" "$@" \
+    > "${TMP}/${log}" 2>&1
+}
+
+# ---- 1. one ext4 volume, no storage_path -> adopted -------------------------
+rm -rf "${DATA}"; mkdir -p "${DATA}/vol1"
+run c1.log -e "$(mounts "${DATA}/vol1:ext4")"
+check "one ext4 volume: play succeeds"        bash -c "! grep -q 'failed=1' '${TMP}/c1.log'"
+check "one ext4 volume: adopted"              grep -qF "RESOLVED storage_root=[${DATA}/vol1]" "${TMP}/c1.log"
+check "inspector_root derived"                grep -qF "inspector_root=[${DATA}/vol1/ddp-inspector]" "${TMP}/c1.log"
+
+# ---- 2. ext4 volume + fuse.rclone mount -> volume adopted, fuse ignored -----
+rm -rf "${DATA}"; mkdir -p "${DATA}/vol1" "${DATA}/rdbylink"
+run c2.log -e "$(mounts "${DATA}/vol1:ext4" "${DATA}/rdbylink:fuse.rclone")"
+check "ext4+fuse: play succeeds"              bash -c "! grep -q 'failed=1' '${TMP}/c2.log'"
+check "ext4+fuse: block volume adopted"       grep -qF "RESOLVED storage_root=[${DATA}/vol1]" "${TMP}/c2.log"
+
+# ---- 3. two ext4 volumes -> loud ambiguity failure --------------------------
+rm -rf "${DATA}"; mkdir -p "${DATA}/vol1" "${DATA}/vol2"
+run c3.log -e "$(mounts "${DATA}/vol1:ext4" "${DATA}/vol2:ext4")"
+check "two volumes: play fails"               grep -q 'failed=1' "${TMP}/c3.log"
+check "two volumes: ambiguity named"          grep -qi 'set storage_path explicitly' "${TMP}/c3.log"
+
+# ---- 4. xfs volume qualifies (block-device allowlist) ------------------------
+rm -rf "${DATA}"; mkdir -p "${DATA}/vol1"
+run c4.log -e "$(mounts "${DATA}/vol1:xfs")"
+check "xfs volume: adopted"                   grep -qF "RESOLVED storage_root=[${DATA}/vol1]" "${TMP}/c4.log"
+
+# ---- 5. ONLY a fuse mount -> treated as no volume -> loud failure ------------
+rm -rf "${DATA}"; mkdir -p "${DATA}/rdbylink"
+run c5.log -e "$(mounts "${DATA}/rdbylink:fuse.rclone")"
+check "fuse only: play fails"                 grep -q 'failed=1' "${TMP}/c5.log"
+check "fuse only: create-a-volume guidance"   grep -qi 'create a small volume' "${TMP}/c5.log"
+
+# ---- 6. no volume at all -> loud failure with create-a-volume fail_msg ------
+rm -rf "${DATA}"; mkdir -p "${DATA}"
+run c6.log -e '{"storage_mounts_source": []}'
+check "no volume: play fails"                 grep -q 'failed=1' "${TMP}/c6.log"
+check "no volume: create-a-volume guidance"   grep -qi 'create a small volume' "${TMP}/c6.log"
+
+# ---- 7. explicit storage_path wins over detection ---------------------------
+rm -rf "${DATA}"; mkdir -p "${DATA}/vol1" "${TMP}/explicit"
+run c7.log -e "$(mounts "${DATA}/vol1:ext4")" -e "storage_path=${TMP}/explicit"
+check "explicit path: respected verbatim"     grep -qF "RESOLVED storage_root=[${TMP}/explicit]" "${TMP}/c7.log"
+
+# ---- 8. unedited placeholder counts as unset -> detection runs --------------
+rm -rf "${DATA}"; mkdir -p "${DATA}/vol1"
+run c8.log -e "$(mounts "${DATA}/vol1:ext4")" \
+  -e 'storage_path=/home/<username>/data/<volume-name>'
+check "placeholder: detection supersedes"     grep -qF "RESOLVED storage_root=[${DATA}/vol1]" "${TMP}/c8.log"
+
+# ---- 9. symlinked entry: ~/data/<vol> -> shared mount elsewhere --------------
+rm -rf "${DATA}"; mkdir -p "${DATA}" "${TMP}/shared/vol1"
+ln -s "${TMP}/shared/vol1" "${DATA}/vol1"
+run c9.log -e "$(mounts "${TMP}/shared/vol1:ext4")"
+check "symlinked volume: adopted via link"    grep -qF "RESOLVED storage_root=[${DATA}/vol1]" "${TMP}/c9.log"
+
+# ---- 10. the data dir ITSELF is a symlink to a shared mount root -------------
+rm -rf "${DATA}"; mkdir -p "${TMP}/sharedroot/vol1"
+ln -s "${TMP}/sharedroot" "${DATA}"
+run c10.log -e "$(mounts "${TMP}/sharedroot/vol1:ext4")"
+check "symlinked data root: volume adopted"   grep -qF "RESOLVED storage_root=[${TMP}/sharedroot/vol1]" "${TMP}/c10.log"
+
+# ---- 11. missing SRC-Nginx conf dir -> loud failure --------------------------
+rm -rf "${DATA}"; mkdir -p "${DATA}/vol1"
+ANSIBLE_ROLES_PATH="${PROV}/roles" "${PLAYBOOK}" "${TMP}/scratch.yaml" \
+  -e "storage_data_root=${DATA}" -e "nginx_confdir=${TMP}/no-such-dir" \
+  -e "preflight_skip_php=true" -e "$(mounts "${DATA}/vol1:ext4")" \
+  > "${TMP}/c11.log" 2>&1
+check "missing nginx dir: play fails"         grep -q 'failed=1' "${TMP}/c11.log"
+check "missing nginx dir: names SRC-Nginx"    grep -qi 'SRC-Nginx' "${TMP}/c11.log"
+
+echo; [ "${FAIL}" -eq 0 ] && echo "ALL PASS" || { echo "${FAIL} FAILURES"; exit 1; }
