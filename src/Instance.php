@@ -186,6 +186,76 @@ function inst_probe(): array {
     return ['ok' => false, 'count' => null, 'message' => 'No data source configured yet.'];
 }
 
+/** @return array{flash: list<array{kind:string, text:string}>} */
+function inst_handle_setup_post(array $post, array $files): array {
+    $flash = fn(string $kind, string $text) => ['flash' => [['kind' => $kind, 'text' => $text]]];
+    $action = (string)($post['action'] ?? '');
+    if (!isset($post['csrf']) || !hash_equals(csrf_token(), (string)$post['csrf'])) {
+        return $flash('error', 'That form has expired — please go back and try again.');
+    }
+    if ($action === 'upload_flow') {
+        $f = $files['flow_zip'] ?? null;
+        if (!is_array($f) || ($f['error'] ?? 1) !== 0 || !is_string($f['tmp_name'] ?? null)) {
+            return $flash('error', 'The upload did not arrive — please choose the zip and try again.');
+        }
+        $flows = inst_paths()['flows'];
+        if ($flows === null) { return $flash('error', 'This instance has no storage volume configured — contact whoever set up this workspace.'); }
+        $r = flows_ingest_upload($f['tmp_name'], $flows);
+        return $flash($r['ok'] ? 'ok' : 'error', $r['message']);
+    }
+    if ($action === 'save_source') {
+        $mode = (string)($post['source_mode'] ?? '');
+        if (!in_array($mode, ['yoda', 'rd-link', 'local'], true)) { return $flash('error', 'Please choose where your donations are stored.'); }
+        $inst = inst_load() ?? [];
+        $instance = [
+            'study_name'  => trim((string)($post['study_name'] ?? ($inst['study_name'] ?? ''))),
+            'source_mode' => $mode,
+            'local_path'  => $mode === 'local' ? trim((string)($post['local_path'] ?? '')) : null,
+            'cadence'     => (($post['cadence'] ?? '') === 'daily') ? 'daily' : 'off',
+            'default_n'   => (int)($inst['default_n'] ?? cfg('default_n', 15)),
+        ];
+        if (isset($inst['analysis_dirs'])) { $instance['analysis_dirs'] = $inst['analysis_dirs']; }
+        if ($mode === 'yoda') {
+            $collection = trim((string)($post['collection'] ?? ''));
+            $ticket = trim((string)($post['access_code'] ?? ''));
+            if ($collection === '' || $ticket === '') { return $flash('error', 'Please fill in both the folder path and the access code your data manager gave you.'); }
+            if (!inst_source_save(['mode' => 'yoda', 'collection' => $collection,
+                    'host' => trim((string)($post['host'] ?? '')) ?: 'fsw.data.uu.nl',
+                    'zone' => trim((string)($post['zone'] ?? '')) ?: 'nluu10p', 'ticket' => $ticket])) {
+                return $flash('error', 'Could not save — the storage volume may be full or read-only.');
+            }
+        } elseif ($mode === 'rd-link') {
+            $link = trim((string)($post['share_link'] ?? ''));
+            $pw = (string)($post['link_password'] ?? '');
+            $parts = parse_url($link);
+            $token = ($parts !== false && isset($parts['path'])) ? basename(rtrim($parts['path'], '/')) : '';
+            if ($link === '' || $pw === '' || $token === '' || !isset($parts['scheme'], $parts['host'])) {
+                return $flash('error', 'Please paste the full share link and its password.');
+            }
+            if (!inst_source_save(['mode' => 'rd-link',
+                    'webdav_url' => $parts['scheme'] . '://' . $parts['host'] . '/public.php/dav/files/' . rawurlencode($token) . '/',
+                    'share_token' => $token, 'password' => $pw])) {
+                return $flash('error', 'Could not save — the storage volume may be full or read-only.');
+            }
+        } else {
+            if ($instance['local_path'] === '') { return $flash('error', 'Please fill in the folder path.'); }
+        }
+        if (!inst_save($instance)) { return $flash('error', 'Could not save — the storage volume may be full or read-only.'); }
+        return $flash('ok', 'Saved ✓ — now run "Check & fetch" below.');
+    }
+    if ($action === 'check_fetch') {
+        $probe = inst_probe();
+        if (!$probe['ok']) { return $flash('error', $probe['message']); }
+        inst_touch_refresh();
+        return $flash('ok', $probe['message'] . ' Fetching your donations now — refresh this page to see progress.');
+    }
+    if ($action === 'refresh_now') {
+        inst_touch_refresh();
+        return $flash('ok', 'Checking for new donations — refresh this page in a minute.');
+    }
+    return $flash('error', 'Unknown action.');
+}
+
 function inst_gocmd_config(array $src): string {
     // Credential-free anonymous read-ticket config (validated pattern 2026-07-13;
     // field names must match the transcribe repo's ticket config — verify once
