@@ -121,3 +121,49 @@ unset($phar);
 $r = flows_ingest_upload($noDoc, $flowsDir);
 eq($r['ok'], false, 'missing documentation rejected');
 check(str_contains($r['message'], 'documentation'), 'missing-doc message names the problem');
+
+// Temp-copy cleanup: an upload without a .zip suffix gets copied to "<path>.zip" so
+// PharData can read it; that copy must be removed even when ingestion fails early.
+$noExtBad = "$tmpdir/upload-no-ext";
+file_put_contents($noExtBad, 'not a zip at all, and no .zip extension either');
+$r = flows_ingest_upload($noExtBad, $flowsDir);
+eq($r['ok'], false, 'garbage upload without .zip extension rejected');
+check(!is_file("$noExtBad.zip"), 'temp .zip copy is cleaned up even on early-failure paths');
+
+// Decompression-bomb guard: documentation.txt that inflates far past a sane size for a
+// real flow doc must be rejected before its full content is read into memory.
+$bombZip = "$tmpdir/bomb.zip";
+$hugeDoc = str_repeat('A', 5 * 1024 * 1024); // 5 MiB, highly compressible -> tiny on disk
+$phar = new PharData($bombZip);
+$phar->addFromString('documentation.txt', $hugeDoc);
+$phar['documentation.txt']->compress(Phar::GZ);
+$phar->addFromString('build_x_y_bombplatform_development_2026-01-01_00-00-00.zip', 'x');
+unset($phar);
+check(filesize($bombZip) < 1024 * 1024, 'bomb fixture zip is small on disk despite huge uncompressed content');
+$r = flows_ingest_upload($bombZip, $flowsDir);
+eq($r['ok'], false, 'oversized uncompressed documentation.txt rejected');
+check(str_contains($r['message'], 'large'), 'decompression-bomb rejection message is plain-language');
+check(!is_dir("$flowsDir/bombplatform"), 'nothing installed for the rejected bomb export');
+
+// Malicious entry names (path traversal): PharData silently drops entries containing
+// '..' or a leading '/' while iterating a crafted zip, and this ingestion path never
+// extracts entries to disk under their own names anyway — only the fixed filenames
+// documentation.txt and build-meta.json are ever written. Pin the OUTCOME, not the
+// mechanism: no file may ever land outside the flows dir, regardless of whether
+// ingestion itself succeeds or fails.
+$travPid = getmypid();
+$travMarkerRel = sys_get_temp_dir() . "/ddp-flows-traversal-marker-$travPid.txt";
+$travMarkerAbs = sys_get_temp_dir() . "/ddp-flows-traversal-abs-marker-$travPid.txt";
+@unlink($travMarkerRel); @unlink($travMarkerAbs);
+$travZip = "$tmpdir/traversal.zip";
+$za = new ZipArchive();
+$za->open($travZip, ZipArchive::CREATE | ZipArchive::OVERWRITE);
+$za->addFromString('documentation.txt', (string)file_get_contents(__DIR__ . '/fixtures/flows/facebook/documentation.txt'));
+$za->addFromString('build_x_y_travplatform_development_2026-01-01_00-00-00.zip', 'x');
+$za->addFromString("../../../../tmp/ddp-flows-traversal-marker-$travPid.txt", 'pwned');
+$za->addFromString("/tmp/ddp-flows-traversal-abs-marker-$travPid.txt", 'pwned');
+$za->close();
+$r = flows_ingest_upload($travZip, $flowsDir);
+check(!is_file($travMarkerRel), 'relative traversal entry never lands outside the flows dir');
+check(!is_file($travMarkerAbs), 'absolute-path entry never lands outside the flows dir');
+@unlink($travMarkerRel); @unlink($travMarkerAbs);
