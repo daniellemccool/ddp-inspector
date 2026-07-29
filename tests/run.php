@@ -8,7 +8,7 @@ function check(bool $cond, string $msg): void {
 function eq($got, $want, string $msg): void {
     check($got === $want, "$msg (got " . var_export($got, true) . ", want " . var_export($want, true) . ")");
 }
-foreach (['DdpTest.php', 'StatsTest.php', 'SampleTest.php', 'AnalysisTest.php', 'InstanceTest.php', 'PagesTest.php'] as $f) {
+foreach (['DdpTest.php', 'StatsTest.php', 'SampleTest.php', 'AnalysisTest.php', 'InstanceTest.php', 'PagesTest.php', 'FlowsTest.php'] as $f) {
     $p = __DIR__ . '/' . $f;
     if (is_file($p)) { require $p; }
 }

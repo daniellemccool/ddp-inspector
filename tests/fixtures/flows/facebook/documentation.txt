@@ -1,0 +1,40 @@
+# Facebook
+
+This document describes the data tables and variables included in the data donation flow for Facebook.
+
+## Facebook items you recently viewed
+
+This table shows the Facebook posts, videos, and other items you have recently viewed.
+
+| Variable | Description |
+| -------- | ----------- |
+| `Category` | Content category (e.g. Videos, Marketplace). |
+| `Date` | ISO 8601 timestamp of when the item was viewed. |
+| `Link` | URL of the viewed item. |
+| `Name` | Name or title of the viewed item. |
+
+## Profiles you visited recently
+
+This table lists the Facebook profiles you have visited most recently.
+
+| Variable | Description |
+| -------- | ----------- |
+| `Category` | Category of the visited item. |
+| `Date` | ISO 8601 timestamp of when the visit occurred. |
+| `Link` | URL of the visited profile or page. |
+| `Name` | Name or title of the visited profile or page. |
+
+## Your search history
+
+This table contains a record of your search queries on Facebook.
+
+| Variable | Description |
+| -------- | ----------- |
+| `Date` | ISO 8601 timestamp of when the search was made. |
+| `Search term` | The search query entered by the participant. |
+
+---
+
+## Build information
+
+This flow was generated from commit `356f6e10dbb38dbf1eb69eea220c68a5c0f47ff3` of the data-donation-task repository.

@@ -1,0 +1,21 @@
+# TikTok
+
+This document describes the data tables and variables included in the data donation flow for TikTok.
+
+## Videos you watched
+
+Watch history from your TikTok account.
+
+| Variable | Description |
+| -------- | ----------- |
+| `Date` | Timestamp of the view. |
+| `Link` | URL of the watched video. |
+
+## Comments you posted
+
+Your comments.
+
+| Variable | Description |
+| -------- | ----------- |
+| `Date` | Timestamp of the comment. |
+| `Comment` | Text of the comment. |
