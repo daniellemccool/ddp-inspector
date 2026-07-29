@@ -2,34 +2,30 @@
 require_once __DIR__ . '/../src/Ddp.php';
 require_once __DIR__ . '/../src/Stats.php';
 
-eq(stats_canonical_video_id('https://www.tiktokv.com/share/video/7654562293757250829/'), '7654562293757250829', 'canonical tiktokv share');
-eq(stats_canonical_video_id('https://www.tiktok.com/@user/video/7654562293757250829'), '7654562293757250829', 'canonical @user form');
-eq(stats_canonical_video_id('https://vm.tiktok.com/abc123/'), null, 'short link not canonical');
-eq(stats_canonical_video_id('not a url'), null, 'garbage not canonical');
-
 eq(stats_parse_date('2026-07-05 11:53:55'), gmmktime(11,53,55,7,5,2026), 'plain date');
 eq(stats_parse_date('2026-05-28 01:36:28 UTC'), gmmktime(1,36,28,5,28,2026), 'UTC-suffixed date');
 eq(stats_parse_date('garbage'), null, 'bad date null');
 
+eq(stats_parse_date_any('2026-07-05 11:53:55'), gmmktime(11,53,55,7,5,2026), 'any: legacy format');
+eq(stats_parse_date_any('2026-01-01T10:00:00'), gmmktime(10,0,0,1,1,2026), 'any: ISO no offset = UTC');
+eq(stats_parse_date_any('2026-01-01T10:00:00+02:00'), gmmktime(8,0,0,1,1,2026), 'any: ISO with offset');
+eq(stats_parse_date_any('2026-01-01T10:00:00.123Z'), gmmktime(10,0,0,1,1,2026), 'any: ISO fractional Z');
+eq(stats_parse_date_any('nope'), null, 'any: garbage null');
+
+eq(stats_row_date(['Timestamp' => '2026-01-01T10:00:00']), gmmktime(10,0,0,1,1,2026), 'row date via Timestamp');
+eq(stats_row_date(['time' => '2026-01-01T10:00:00', 'Date' => 'garbage']), gmmktime(10,0,0,1,1,2026), 'row date skips unparseable, tries next column');
+eq(stats_row_date(['Other' => 'x']), null, 'row date none');
+
 $loaded = ddp_load_dir(__DIR__ . '/fixtures/ddp');
 $t1 = $loaded['participants']['p1']['platforms']['tiktok']['tables'];
-
 $wh = stats_section_summary($t1['tiktok_watch_history']);
 eq($wh['count'], 3, 'watch count');
 eq($wh['earliest'], gmmktime(23,24,12,1,30,2026), 'watch earliest');
 eq($wh['latest'], gmmktime(11,53,55,7,5,2026), 'watch latest');
 
-// video 7654562293757250829 appears in both watch and like -> deduped
-eq(stats_unique_video_count($t1), 4, 'unique videos across watch/fav/like deduped');
-
-// stats_participant_scope still expects the old {sections: ...} shape (deprecated;
-// Task 4 rewrites Stats.php to consume platforms/tables directly).
-$scope = stats_participant_scope(['sections' => $t1]);
-eq($scope['sections']['tiktok_comments']['count'], 2, 'scope comments count');
-eq(array_key_first($scope['sections']), 'tiktok_watch_history', 'scope ordered by DDP_SECTION_ORDER');
-eq($scope['unique_videos'], 4, 'scope unique videos');
-
-$noComments = ['sections' => ['tiktok_watch_history' => [['Date' => '2026-07-05 11:53:55', 'Link' => 'https://www.tiktokv.com/share/video/7654562293757250829/']]]];
-$scNo = stats_participant_scope($noComments);
-eq($scNo['sections']['tiktok_comments']['count'], 0, 'absent section still shown with count 0');
-eq(count(array_intersect(DDP_SECTION_ORDER, array_keys($scNo['sections']))), 5, 'all five canonical sections present even when absent from data');
+$scope = stats_platform_scope($t1, array_keys($t1));
+eq($scope['tables']['tiktok_comments']['count'], 2, 'scope comments count');
+eq($scope['total_rows'] >= 5, true, 'scope totals rows');
+$scope2 = stats_platform_scope($t1, ['tiktok_watch_history', 'absent_table']);
+eq($scope2['tables']['absent_table']['count'], 0, 'ordered-but-absent table shown with 0');
+eq(array_key_first($scope2['tables']), 'tiktok_watch_history', 'display order respected');

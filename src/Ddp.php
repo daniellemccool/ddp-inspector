@@ -1,12 +1,4 @@
 <?php
-const DDP_SECTION_ORDER = [
-    'tiktok_watch_history',
-    'tiktok_favorite_videos',
-    'tiktok_like_list',
-    'tiktok_share_history',
-    'tiktok_comments',
-];
-
 /** @return array{participant:string, source:string, key_millis:int} */
 function ddp_file_meta(string $path): array {
     $stem = pathinfo($path, PATHINFO_FILENAME);
