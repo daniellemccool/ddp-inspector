@@ -2,7 +2,7 @@
 
 A read-only viewer for DDP (Data Donation Package) extracts, generalized across
 donated platforms: participant → platform → tables. Renders each table faithfully —
-with scope (counts, date ranges, unique videos), sampled content, and an optional
+with scope (per-table row counts, date ranges), seeded samples, and an optional
 transcript view — so a researcher can verify that donations match expectations.
 Table titles and descriptions are drawn from the donation flow's own export docs
 when available, falling back to the raw table names.
@@ -43,5 +43,5 @@ See `deploy/PROVISION.md`.
 
 ## Notes
 - Reads raw DDP JSON files directly (not the pipeline's state DB).
-- Comments are shown standalone — the export carries no comment↔video link.
+- TikTok comments are shown standalone — the export carries no comment↔video link.
 - Transcripts are optional; unset `transcripts_dir` and the tool still works fully.
