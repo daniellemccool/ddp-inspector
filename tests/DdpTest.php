@@ -19,6 +19,12 @@ eq(ddp_parse_file($dir . '/assignment=1_task=1_participant=preview_source=tiktok
 $p2 = ddp_parse_file(__DIR__ . '/fixtures/ddp2/assignment=1_task=1_participant=p2_source=instagram_key=5-instagram.json');
 eq($p2['deleted']['instagram_followers'], 2, 'nonzero deleted count captured');
 
+$p3 = ddp_parse_file(__DIR__ . '/fixtures/ddp2/assignment=1_task=1_participant=p3_source=x_key=7-x.json');
+eq($p3['deleted']['x_a'], 0, 'multi-table entry: ambiguous deleted count refused for x_a');
+eq($p3['deleted']['x_b'], 0, 'multi-table entry: ambiguous deleted count refused for x_b');
+eq(count($p3['tables']['x_a']), 1, 'multi-table entry: x_a rows still parsed');
+eq(count($p3['tables']['x_b']), 1, 'multi-table entry: x_b rows still parsed');
+
 $loaded = ddp_load_dir($dir);
 eq(array_keys($loaded['participants']), ['p1'], 'only conforming participant loaded');
 eq(count($loaded['skipped']), 1, 'one skipped file reported');

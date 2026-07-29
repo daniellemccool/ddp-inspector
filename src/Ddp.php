@@ -35,11 +35,24 @@ function ddp_parse_file(string $path): ?array {
     foreach ($data as $element) {
         if (!is_array($element)) { continue; }
         $del = isset($element['deleted row count']) ? (int)$element['deleted row count'] : 0;
+
+        // Count how many actual table arrays are in this element
+        $tableCount = 0;
+        foreach ($element as $key => $value) {
+            if (is_array($value) && array_is_list($value)) {
+                $tableCount++;
+            }
+        }
+
+        // Only attribute deleted count if exactly one table; otherwise 0 (ambiguous)
+        $attributeDel = ($tableCount === 1) ? $del : 0;
+
+        // Now process the tables
         foreach ($element as $key => $value) {
             if (!is_array($value) || !array_is_list($value)) { continue; }
             $rows = array_values(array_filter($value, 'is_array'));
             $tables[$key] = array_merge($tables[$key] ?? [], $rows);
-            $deleted[$key] = ($deleted[$key] ?? 0) + $del;
+            $deleted[$key] = ($deleted[$key] ?? 0) + $attributeDel;
         }
     }
     return ['tables' => $tables, 'deleted' => $deleted];
