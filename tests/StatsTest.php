@@ -11,6 +11,8 @@ eq(stats_parse_date_any('2026-01-01T10:00:00'), gmmktime(10,0,0,1,1,2026), 'any:
 eq(stats_parse_date_any('2026-01-01T10:00:00+02:00'), gmmktime(8,0,0,1,1,2026), 'any: ISO with offset');
 eq(stats_parse_date_any('2026-01-01T10:00:00.123Z'), gmmktime(10,0,0,1,1,2026), 'any: ISO fractional Z');
 eq(stats_parse_date_any('nope'), null, 'any: garbage null');
+eq(stats_parse_date_any('2026-02-30T10:00:00'), null, 'any: impossible ISO date rejected');
+eq(stats_parse_date_any('2026-01-01T25:00:00'), null, 'any: impossible ISO time rejected');
 
 eq(stats_row_date(['Timestamp' => '2026-01-01T10:00:00']), gmmktime(10,0,0,1,1,2026), 'row date via Timestamp');
 eq(stats_row_date(['time' => '2026-01-01T10:00:00', 'Date' => 'garbage']), gmmktime(10,0,0,1,1,2026), 'row date skips unparseable, tries next column');

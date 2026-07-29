@@ -22,6 +22,8 @@ function stats_parse_date_any(string $s): ?int {
     $s = trim($s);
     if (!preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:?\d{2})?$/', $s)) { return null; }
     try { $dt = new DateTimeImmutable($s, new DateTimeZone('UTC')); } catch (Exception) { return null; }
+    // Reject inputs DateTimeImmutable silently overflowed (e.g. Feb 30 -> Mar 2)
+    if ($dt->format('Y-m-d\TH:i:s') !== substr($s, 0, 19)) { return null; }
     return $dt->getTimestamp();
 }
 
