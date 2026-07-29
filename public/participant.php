@@ -75,7 +75,7 @@ $scope = stats_participant_scope(['sections' => $sections]);
             if ($name === 'tiktok_comments'): ?>
               <tr><td class="date"><?= $date ?></td><td class="comment"><?= h((string)($row['Comment'] ?? '')) ?></td></tr>
             <?php else:
-              $vid = isset($row['Link']) ? stats_canonical_video_id((string)$row['Link']) : null; ?>
+              $vid = isset($row['Link']) ? analysis_tiktok_video_id((string)$row['Link']) : null; ?>
               <tr>
                 <td class="date"><?= $date ?></td>
                 <td class="vid">

@@ -1,10 +1,4 @@
 <?php
-function stats_canonical_video_id(string $url): ?string {
-    $re = '~^https?://(?:www\.)?(?:tiktokv|tiktok)\.com/(?:share/video|@[^/]+/video)/(\d{19})(?:/|\?|$)~';
-    if (preg_match($re, $url, $m)) { return $m[1]; }
-    return null;
-}
-
 function stats_parse_date(string $s): ?int {
     $s = trim($s);
     $hasUtc = str_ends_with($s, ' UTC');
@@ -80,7 +74,7 @@ function stats_participant_scope(array $participant): array {
     foreach ($videoSections as $name) {
         foreach ($sections[$name] ?? [] as $row) {
             if (!isset($row['Link'])) { continue; }
-            $id = stats_canonical_video_id((string)$row['Link']);
+            $id = analysis_tiktok_video_id((string)$row['Link']);
             if ($id !== null) { $ids[$id] = true; }
         }
     }
