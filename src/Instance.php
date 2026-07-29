@@ -34,8 +34,10 @@ function inst_write_json_atomic(string $path, array $data, int $mode = 0644): bo
     if (!is_dir($dir) && !@mkdir($dir, 0755, true)) { return false; }
     $tmp = $path . '.tmp';
     $json = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
-    if ($json === false || @file_put_contents($tmp, $json . "\n") === false) { return false; }
-    @chmod($tmp, $mode);
+    if ($json === false) { return false; }
+    if (@touch($tmp) === false) { return false; }
+    if (!@chmod($tmp, $mode)) { @unlink($tmp); return false; }
+    if (@file_put_contents($tmp, $json . "\n") === false) { @unlink($tmp); return false; }
     if (!@rename($tmp, $path)) { @unlink($tmp); return false; }
     return true;
 }

@@ -31,4 +31,12 @@ eq(inst_source_load()['ticket'], 'SECRET', 'source round-trips');
 eq(substr(sprintf('%o', fileperms("$scratch/config/source.json")), -3), '600', 'source.json is 0600');
 check(!file_exists("$scratch/config/source.json.tmp"), 'atomic write leaves no temp file');
 
+// Failure path: parent segment is an existing plain file, so mkdir cannot create it.
+$blocker = "$scratch/blocker-file";
+file_put_contents($blocker, 'x');
+$blocked_target = "$blocker/x.json";
+eq(inst_write_json_atomic($blocked_target, ['a' => 1]), false, 'atomic write fails when parent path is blocked by a file');
+check(!file_exists($blocked_target), 'blocked write creates no target file');
+check(!file_exists($blocked_target . '.tmp'), 'blocked write leaves no temp file');
+
 $GLOBALS['__cfg'] = $GLOBALS['__cfg_saved_inst'];
