@@ -7,14 +7,22 @@ const DDP_SECTION_ORDER = [
     'tiktok_comments',
 ];
 
-function ddp_participant_id_from_filename(string $path): string {
+/** @return array{participant:string, source:string, key_millis:int} */
+function ddp_file_meta(string $path): array {
     $stem = pathinfo($path, PATHINFO_FILENAME);
+    $out = ['participant' => $stem, 'source' => 'unknown', 'key_millis' => 0];
     foreach (explode('_', $stem) as $seg) {
-        if (str_starts_with($seg, 'participant=')) {
-            return substr($seg, strlen('participant='));
+        if (str_starts_with($seg, 'participant=')) { $out['participant'] = substr($seg, 12); }
+        if (str_starts_with($seg, 'source='))      { $out['source'] = substr($seg, 7); }
+        if (str_starts_with($seg, 'key=')) {
+            if (preg_match('/^key=(\d+)/', $seg, $m)) { $out['key_millis'] = (int)$m[1]; }
         }
     }
-    return $stem;
+    return $out;
+}
+
+function ddp_participant_id_from_filename(string $path): string {
+    return ddp_file_meta($path)['participant'];
 }
 
 /** @return array<string,list<array>>|null */

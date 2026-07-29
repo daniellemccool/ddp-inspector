@@ -19,3 +19,12 @@ $loaded = ddp_load_dir($dir);
 eq(array_keys($loaded['participants']), ['p1'], 'only conforming participant loaded');
 eq(count($loaded['skipped']), 1, 'one skipped file reported');
 eq($loaded['participants']['p1']['sections']['tiktok_comments'][1]['Comment'], 'second comment', 'comments merged in order');
+
+$meta = ddp_file_meta('/x/assignment=406_task=954_participant=abc_source=instagram_key=1783300000002-instagram.json');
+eq($meta['participant'], 'abc', 'meta participant');
+eq($meta['source'], 'instagram', 'meta source');
+eq($meta['key_millis'], 1783300000002, 'meta key millis');
+$meta2 = ddp_file_meta('/x/no-segment.json');
+eq($meta2['participant'], 'no-segment', 'meta falls back to stem');
+eq($meta2['source'], 'unknown', 'meta source fallback');
+eq($meta2['key_millis'], 0, 'meta millis fallback');
