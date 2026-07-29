@@ -1,0 +1,5 @@
+---
+# Replaced in Task 2.
+- name: Preflight placeholder
+  ansible.builtin.debug:
+    msg: "preflight stub"

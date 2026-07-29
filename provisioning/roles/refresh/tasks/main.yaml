@@ -1,0 +1,5 @@
+---
+# Replaced in Tasks 4–5.
+- name: Refresh placeholder
+  ansible.builtin.debug:
+    msg: "refresh stub"
