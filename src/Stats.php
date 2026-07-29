@@ -64,6 +64,8 @@ function stats_platform_scope(array $tables, array $order): array {
  * rewrite (working directly off platforms/tables via stats_platform_scope) removes both
  * the pages' flattening code and this wrapper; everything below is inlined here on
  * purpose so that deletion is a single, self-contained removal.
+ * Runtime dependency: calls analysis_tiktok_video_id() from Analysis.php (guarded
+ * below with function_exists) — this shim is deleted at Task 12, not fixed up further.
  */
 function stats_participant_scope(array $participant): array {
     $sections = $participant['sections'] ?? [];
@@ -73,7 +75,7 @@ function stats_participant_scope(array $participant): array {
     $ids = [];
     foreach ($videoSections as $name) {
         foreach ($sections[$name] ?? [] as $row) {
-            if (!isset($row['Link'])) { continue; }
+            if (!isset($row['Link']) || !function_exists('analysis_tiktok_video_id')) { continue; }
             $id = analysis_tiktok_video_id((string)$row['Link']);
             if ($id !== null) { $ids[$id] = true; }
         }
