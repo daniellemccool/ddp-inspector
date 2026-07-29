@@ -25,11 +25,6 @@ eq($p3['deleted']['x_b'], 0, 'multi-table entry: ambiguous deleted count refused
 eq(count($p3['tables']['x_a']), 1, 'multi-table entry: x_a rows still parsed');
 eq(count($p3['tables']['x_b']), 1, 'multi-table entry: x_b rows still parsed');
 
-$loaded = ddp_load_dir($dir);
-eq(array_keys($loaded['participants']), ['p1'], 'only conforming participant loaded');
-eq(count($loaded['skipped']), 1, 'one skipped file reported');
-eq($loaded['participants']['p1']['sections']['tiktok_comments'][1]['Comment'], 'second comment', 'comments merged in order');
-
 $meta = ddp_file_meta('/x/assignment=406_task=954_participant=abc_source=instagram_key=1783300000002-instagram.json');
 eq($meta['participant'], 'abc', 'meta participant');
 eq($meta['source'], 'instagram', 'meta source');
@@ -38,3 +33,13 @@ $meta2 = ddp_file_meta('/x/no-segment.json');
 eq($meta2['participant'], 'no-segment', 'meta falls back to stem');
 eq($meta2['source'], 'unknown', 'meta source fallback');
 eq($meta2['key_millis'], 0, 'meta millis fallback');
+
+$loaded2 = ddp_load_dir(__DIR__ . '/fixtures/ddp2');
+$p2p = $loaded2['participants']['p2']['platforms']['instagram'];
+eq($p2p['key_millis'], 5, 'newest key wins for duplicate participant+source');
+eq($p2p['tables']['instagram_followers'][0]['Account'], 'a', 'winning file rows used');
+eq($p2p['superseded'], ['assignment=1_task=1_participant=p2_source=instagram_key=3-instagram.json'], 'older file listed as superseded');
+$loaded = ddp_load_dir($dir);
+eq(array_keys($loaded['participants']), ['p1'], 'only conforming participant loaded');
+eq(count($loaded['skipped']), 1, 'one skipped file reported');
+eq(count($loaded['participants']['p1']['platforms']['tiktok']['tables']['tiktok_comments']), 2, 'comments present under platform');

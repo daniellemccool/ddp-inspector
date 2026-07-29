@@ -18,7 +18,19 @@ if ($participant === null) {
     echo '<!doctype html><title>Not found</title><p>Participant not found (404).</p>';
     return;
 }
-$scope = stats_participant_scope($participant);
+// Flatten platform tables/files into the old {sections:...}/files shape stats_participant_scope
+// and this page still expect (deprecated; Task 4 rewrites Stats.php + this page to consume
+// platforms directly).
+$files = [];
+$sections = [];
+foreach ($participant['platforms'] as $platform) {
+    $files[] = $platform['file'];
+    array_push($files, ...$platform['superseded']);
+    foreach ($platform['tables'] as $name => $rows) {
+        $sections[$name] = array_merge($sections[$name] ?? [], $rows);
+    }
+}
+$scope = stats_participant_scope(['sections' => $sections]);
 ?>
 <!doctype html>
 <meta charset="utf-8">
@@ -27,7 +39,7 @@ $scope = stats_participant_scope($participant);
 <main class="wrap">
   <p><a href="<?= h(url('index.php')) ?>">← all participants</a></p>
   <h1>participant <?= h($id) ?></h1>
-  <p class="meta"><?= count($participant['files']) ?> file(s); unique videos:
+  <p class="meta"><?= count($files) ?> file(s); unique videos:
      <strong><?= number_format($scope['unique_videos']) ?></strong></p>
 
   <h2>Scope</h2>
@@ -48,7 +60,7 @@ $scope = stats_participant_scope($participant);
   </p>
 
   <?php foreach ($scope['sections'] as $name => $s):
-      $rows = $participant['sections'][$name] ?? [];
+      $rows = $sections[$name] ?? [];
       $sample = sample_rows($rows, $n, $seed, $name);
       $reshuffle = url('participant.php?id=' . rawurlencode($id) . '&n=' . $n . '&seed=' . ($seed + 1)); ?>
     <section>

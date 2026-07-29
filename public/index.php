@@ -23,7 +23,15 @@ $loaded = ddp_load_dir((string)cfg('ddp_dir'));
     <thead><tr><th>participant</th><th>total rows</th><th>unique videos</th><th>earliest</th><th>latest</th></tr></thead>
     <tbody>
     <?php foreach ($loaded['participants'] as $p):
-        $scope = stats_participant_scope($p); ?>
+        // Flatten platform tables into the old {sections:...} shape stats_participant_scope
+        // still expects (deprecated; Task 4 rewrites Stats.php to consume platforms directly).
+        $sections = [];
+        foreach ($p['platforms'] as $platform) {
+            foreach ($platform['tables'] as $name => $rows) {
+                $sections[$name] = array_merge($sections[$name] ?? [], $rows);
+            }
+        }
+        $scope = stats_participant_scope(['sections' => $sections]); ?>
       <tr>
         <td><a href="<?= h(url('participant.php?id=' . rawurlencode($p['id']))) ?>"><?= h($p['id']) ?></a></td>
         <td class="num"><?= number_format($scope['total_rows']) ?></td>

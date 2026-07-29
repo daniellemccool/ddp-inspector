@@ -12,17 +12,19 @@ eq(stats_parse_date('2026-05-28 01:36:28 UTC'), gmmktime(1,36,28,5,28,2026), 'UT
 eq(stats_parse_date('garbage'), null, 'bad date null');
 
 $loaded = ddp_load_dir(__DIR__ . '/fixtures/ddp');
-$p1 = $loaded['participants']['p1'];
+$t1 = $loaded['participants']['p1']['platforms']['tiktok']['tables'];
 
-$wh = stats_section_summary($p1['sections']['tiktok_watch_history']);
+$wh = stats_section_summary($t1['tiktok_watch_history']);
 eq($wh['count'], 3, 'watch count');
 eq($wh['earliest'], gmmktime(23,24,12,1,30,2026), 'watch earliest');
 eq($wh['latest'], gmmktime(11,53,55,7,5,2026), 'watch latest');
 
 // video 7654562293757250829 appears in both watch and like -> deduped
-eq(stats_unique_video_count($p1['sections']), 4, 'unique videos across watch/fav/like deduped');
+eq(stats_unique_video_count($t1), 4, 'unique videos across watch/fav/like deduped');
 
-$scope = stats_participant_scope($p1);
+// stats_participant_scope still expects the old {sections: ...} shape (deprecated;
+// Task 4 rewrites Stats.php to consume platforms/tables directly).
+$scope = stats_participant_scope(['sections' => $t1]);
 eq($scope['sections']['tiktok_comments']['count'], 2, 'scope comments count');
 eq(array_key_first($scope['sections']), 'tiktok_watch_history', 'scope ordered by DDP_SECTION_ORDER');
 eq($scope['unique_videos'], 4, 'scope unique videos');

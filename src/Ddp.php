@@ -59,24 +59,29 @@ function ddp_parse_file(string $path): ?array {
 }
 
 function ddp_load_dir(string $dir): array {
-    $participants = [];
-    $skipped = [];
+    $participants = []; $skipped = [];
     foreach (glob(rtrim($dir, '/') . '/*.json') ?: [] as $path) {
         $parsed = ddp_parse_file($path);
         if ($parsed === null) {
-            $skipped[] = ['path' => basename($path), 'reason' => 'not a DDP array (skipped)'];
+            $skipped[] = ['path' => basename($path), 'reason' => 'not a donation file (skipped)'];
             continue;
         }
-        $id = ddp_participant_id_from_filename($path);
-        if (!isset($participants[$id])) {
-            $participants[$id] = ['id' => $id, 'files' => [], 'sections' => []];
-        }
-        $participants[$id]['files'][] = basename($path);
-        foreach ($parsed['tables'] as $name => $rows) {
-            $participants[$id]['sections'][$name] =
-                array_merge($participants[$id]['sections'][$name] ?? [], $rows);
+        $meta = ddp_file_meta($path);
+        $id = $meta['participant']; $src = $meta['source'];
+        $participants[$id] ??= ['id' => $id, 'platforms' => []];
+        $cur = $participants[$id]['platforms'][$src] ?? null;
+        $entry = ['file' => basename($path), 'key_millis' => $meta['key_millis'],
+                  'superseded' => [], 'tables' => $parsed['tables'], 'deleted' => $parsed['deleted']];
+        if ($cur === null) {
+            $participants[$id]['platforms'][$src] = $entry;
+        } elseif ($meta['key_millis'] > $cur['key_millis']) {
+            $entry['superseded'] = array_merge($cur['superseded'], [$cur['file']]);
+            $participants[$id]['platforms'][$src] = $entry;
+        } else {
+            $participants[$id]['platforms'][$src]['superseded'][] = basename($path);
         }
     }
     ksort($participants);
+    foreach ($participants as &$p) { ksort($p['platforms']); }
     return ['participants' => $participants, 'skipped' => $skipped];
 }
