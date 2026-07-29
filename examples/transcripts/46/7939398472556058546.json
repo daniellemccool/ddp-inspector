@@ -1,0 +1,194 @@
+{
+ "video_id": "7939398472556058546",
+ "source_url": "https://www.tiktokv.com/share/video/7939398472556058546/",
+ "duration_s": 18.0,
+ "language_detected": "en",
+ "transcribed_at": "2026-07-10T09:30:00Z",
+ "fetcher": "ytdlp",
+ "transcript_source": "whisper-rs",
+ "model": "small",
+ "raw_signals": {
+  "schema_version": "1",
+  "language": "en",
+  "lang_probs": null,
+  "segments": [
+   {
+    "no_speech_prob": 8.186784399185012e-10,
+    "tokens": [
+     {
+      "id": 50365,
+      "text": "[_BEG_]",
+      "p": 0.62,
+      "plog": -0.478
+     },
+     {
+      "id": 1000,
+      "text": "Tonight",
+      "p": 0.9392,
+      "plog": -0.4479
+     },
+     {
+      "id": 1001,
+      "text": " on",
+      "p": 0.9267,
+      "plog": -0.1986
+     },
+     {
+      "id": 1002,
+      "text": " the",
+      "p": 0.8225,
+      "plog": -0.831
+     },
+     {
+      "id": 1003,
+      "text": " neighbourhood",
+      "p": 0.9733,
+      "plog": -0.8772
+     },
+     {
+      "id": 1004,
+      "text": " watch",
+      "p": 0.7332,
+      "plog": -0.3473
+     },
+     {
+      "id": 1005,
+      "text": " update",
+      "p": 0.8732,
+      "plog": -0.3688
+     },
+     {
+      "id": 50579,
+      "text": "[_TT_200]",
+      "p": 0.51,
+      "plog": -0.67
+     }
+    ]
+   },
+   {
+    "no_speech_prob": 8.464380723924915e-10,
+    "tokens": [
+     {
+      "id": 50365,
+      "text": "[_BEG_]",
+      "p": 0.62,
+      "plog": -0.478
+     },
+     {
+      "id": 1050,
+      "text": "the",
+      "p": 0.7538,
+      "plog": -0.5175
+     },
+     {
+      "id": 1051,
+      "text": " bridge",
+      "p": 0.8812,
+      "plog": -0.3657
+     },
+     {
+      "id": 1052,
+      "text": " closure",
+      "p": 0.8168,
+      "plog": -0.0328
+     },
+     {
+      "id": 1053,
+      "text": " and",
+      "p": 0.7773,
+      "plog": -0.5064
+     },
+     {
+      "id": 1054,
+      "text": " the",
+      "p": 0.8914,
+      "plog": -0.2489
+     },
+     {
+      "id": 1055,
+      "text": " missing",
+      "p": 0.9259,
+      "plog": -0.3803
+     },
+     {
+      "id": 1056,
+      "text": " bike",
+      "p": 0.8342,
+      "plog": -0.7488
+     },
+     {
+      "id": 50579,
+      "text": "[_TT_201]",
+      "p": 0.51,
+      "plog": -0.67
+     }
+    ]
+   },
+   {
+    "no_speech_prob": 7.660883016920181e-10,
+    "tokens": [
+     {
+      "id": 50365,
+      "text": "[_BEG_]",
+      "p": 0.62,
+      "plog": -0.478
+     },
+     {
+      "id": 1100,
+      "text": "and",
+      "p": 0.8731,
+      "plog": -0.7031
+     },
+     {
+      "id": 1101,
+      "text": " why",
+      "p": 0.9134,
+      "plog": -0.5782
+     },
+     {
+      "id": 1102,
+      "text": " the",
+      "p": 0.7297,
+      "plog": -0.3554
+     },
+     {
+      "id": 1103,
+      "text": " community",
+      "p": 0.7576,
+      "plog": -0.533
+     },
+     {
+      "id": 1104,
+      "text": " meeting",
+      "p": 0.7508,
+      "plog": -0.6553
+     },
+     {
+      "id": 1105,
+      "text": " ran",
+      "p": 0.7633,
+      "plog": -0.0703
+     },
+     {
+      "id": 1106,
+      "text": " long",
+      "p": 0.8226,
+      "plog": -0.6413
+     },
+     {
+      "id": 1107,
+      "text": " again",
+      "p": 0.8168,
+      "plog": -0.6484
+     },
+     {
+      "id": 50579,
+      "text": "[_TT_202]",
+      "p": 0.51,
+      "plog": -0.67
+     }
+    ]
+   }
+  ]
+ }
+}
