@@ -111,6 +111,9 @@ function inst_run(array $argv, int $timeoutSec): array {
         if (time() > $deadline) { proc_terminate($proc, 9); $code = -1; break; }
         usleep(100_000);
     }
+    // Drain whatever the process flushed in the exit race between the last
+    // read above and it actually terminating, before the pipes are closed.
+    $out .= (string)stream_get_contents($pipes[1]) . (string)stream_get_contents($pipes[2]);
     foreach ($pipes as $p) { @fclose($p); }
     @proc_close($proc);
     return ['code' => $code, 'out' => $out];
@@ -190,7 +193,7 @@ function inst_probe(): array {
 function inst_handle_setup_post(array $post, array $files): array {
     $flash = fn(string $kind, string $text) => ['flash' => [['kind' => $kind, 'text' => $text]]];
     $action = (string)($post['action'] ?? '');
-    if (!isset($post['csrf']) || !hash_equals(csrf_token(), (string)$post['csrf'])) {
+    if (!csrf_ok($post)) {
         return $flash('error', 'That form has expired — please go back and try again.');
     }
     if ($action === 'upload_flow') {

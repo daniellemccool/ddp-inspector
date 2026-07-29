@@ -26,7 +26,10 @@ function csrf_token(): string {
     return (string)$_COOKIE['ddpi_csrf'];
 }
 function csrf_field(): string { return '<input type="hidden" name="csrf" value="' . h(csrf_token()) . '">'; }
-function csrf_ok(): bool { return isset($_POST['csrf']) && hash_equals(csrf_token(), (string)$_POST['csrf']); }
+function csrf_ok(?array $post = null): bool {
+    $post ??= $_POST;
+    return isset($post['csrf']) && hash_equals(csrf_token(), (string)$post['csrf']);
+}
 
 function guard_configured(): bool {
     if (inst_configured()) { return true; }

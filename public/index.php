@@ -21,7 +21,7 @@ if ($storageMode) { csrf_token(); }
     <p class="meta">
       <?php if (!empty($status['finished_at'])): ?>Last updated <?= h((string)$status['finished_at']) ?> ·<?php endif; ?>
       <?= inst_donation_count() ?> donation file(s)
-      <?php if ($status['phase'] === 'error'): ?><span class="skipped"><?= h($status['message']) ?></span><?php endif; ?>
+      <?php if ($status['phase'] === 'error'): ?><span class="skipped"><?= h((string)$status['message']) ?></span><?php endif; ?>
     </p>
     <form method="post" action="<?= h(url('setup.php')) ?>">
       <?= csrf_field() ?><input type="hidden" name="action" value="refresh_now">

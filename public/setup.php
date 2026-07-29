@@ -68,7 +68,7 @@ if ($storageMode) { csrf_token(); }
   </form>
   <?php if ($status['phase'] !== 'idle'): ?>
     <p class="<?= $status['phase'] === 'error' ? 'skipped' : 'notice' ?>">
-      Status: <?= h($status['phase']) ?><?= $status['message'] !== '' ? ' — ' . h($status['message']) : '' ?>
+      Status: <?= h((string)$status['phase']) ?><?= $status['message'] !== '' ? ' — ' . h((string)$status['message']) : '' ?>
       <?php if ($status['donations'] !== null): ?> · <?= (int)$status['donations'] ?> donations<?php endif; ?></p>
   <?php endif; ?>
   <details><summary>Technical log</summary><pre><?= h(inst_log_tail()) ?></pre></details>
