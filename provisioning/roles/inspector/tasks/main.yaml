@@ -1,5 +1,79 @@
 ---
-# Replaced in Task 3.
-- name: Inspector placeholder
-  ansible.builtin.debug:
-    msg: "inspector stub"
+# Install php-fpm + the app (from this component's own clone — the repo IS
+# the app, D2/D3), template study-blind config, add our nginx location, and
+# create the namespaced on-volume tree.
+
+- name: Install PHP runtime packages
+  ansible.builtin.apt:
+    name:
+      - php-fpm
+      - php-cli
+      - acl
+      - jq
+      - rsync
+      - unzip
+    state: present
+    update_cache: true
+
+- name: Copy the app from the component clone (public/ + src/)
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../{{ item }}/"
+    dest: "{{ inspector_install_dir }}/{{ item }}/"
+    owner: root
+    group: root
+    mode: "u=rwX,g=rX,o=rX"
+  loop:
+    - public
+    - src
+  notify: Restart php-fpm
+
+- name: Template study-blind config.php
+  ansible.builtin.template:
+    src: config.php.j2
+    dest: "{{ inspector_install_dir }}/config.php"
+    owner: root
+    group: "{{ inspector_service_group }}"
+    mode: "0640"
+
+- name: Create the namespaced on-volume tree
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ inspector_service_user }}"
+    group: "{{ inspector_service_group }}"
+    mode: "0750"
+  loop:
+    - "{{ inspector_root }}"
+    - "{{ inspector_root }}/config"
+    - "{{ inspector_root }}/config/flows"
+    - "{{ inspector_root }}/data"
+    - "{{ inspector_root }}/data/inbox"
+    - "{{ inspector_root }}/data/analyses"
+    - "{{ inspector_root }}/data/analyses/transcripts"
+    - "{{ inspector_root }}/state"
+    - "{{ inspector_root }}/cache"
+
+- name: Raise PHP upload ceilings for flow-export zips
+  ansible.builtin.template:
+    src: 99-ddp-inspector.ini.j2
+    dest: "/etc/php/{{ php_minor_version | default('8.3') }}/fpm/conf.d/99-ddp-inspector.ini"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart php-fpm
+
+- name: Ensure php-fpm is enabled and running
+  ansible.builtin.service:
+    name: "{{ php_fpm_service }}"
+    state: started
+    enabled: true
+  when: ansible_service_mgr == 'systemd'
+
+- name: Add the inspector nginx location (never touches other apps' confs)
+  ansible.builtin.template:
+    src: nginx-location.conf.j2
+    dest: "{{ nginx_confdir | default('/etc/nginx/app-location-conf.d') }}/ddp-inspector.conf"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Validate and reload nginx
