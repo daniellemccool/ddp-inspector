@@ -187,11 +187,18 @@
 # --- PHP service facts (consumed by inspector + refresh roles) ---------------
 
 - name: Determine PHP minor version from apt candidate (e.g. 8.3)
+  # The epoch prefix (e.g. "2:") is optional — Ubuntu 24.04's php-fpm
+  # candidate is unepoched ("Candidate: 8.3.6-1build1"), so both forms must
+  # resolve. regex_search returns a one-element list on match, None on no
+  # match; `| default([], true)` makes None safe to feed to `| first`
+  # (which itself yields Undefined, not an exception, on an empty list),
+  # so the whole pipeline falls back to '8.3' without a templating error.
   ansible.builtin.set_fact:
     php_minor_version: >-
-      {{ preflight_php_policy.stdout
-         | regex_search('Candidate: [0-9]+:([0-9]+\.[0-9]+)', '\1')
-         | first | default('8.3') }}
+      {{ (preflight_php_policy.stdout
+          | regex_search('Candidate: (?:[0-9]+:)?([0-9]+\.[0-9]+)', '\1')
+          | default([], true))
+         | first | default('8.3', true) }}
   when: not (preflight_skip_php | default(false) | bool)
 
 - name: Resolve php-fpm service facts

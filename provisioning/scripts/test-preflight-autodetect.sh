@@ -41,7 +41,11 @@ cat > "${TMP}/scratch.yaml" <<'PLAY'
   tasks:
     - name: Report resolved facts
       ansible.builtin.debug:
-        msg: "RESOLVED storage_root=[{{ storage_root | default('') }}] inspector_root=[{{ inspector_root | default('') }}]"
+        msg: >-
+          RESOLVED storage_root=[{{ storage_root | default('') }}]
+          inspector_root=[{{ inspector_root | default('') }}]
+          php_fpm_service=[{{ php_fpm_service | default('') }}]
+          php_fpm_sock=[{{ php_fpm_sock | default('') }}]
 PLAY
 
 mounts() { # mounts <dir:fstype ...> -> -e JSON dict with fstype-carrying entries
@@ -131,5 +135,48 @@ ANSIBLE_ROLES_PATH="${PROV}/roles" "${PLAYBOOK}" "${TMP}/scratch.yaml" \
   > "${TMP}/c11.log" 2>&1
 check "missing nginx dir: play fails"         grep -q 'failed=1' "${TMP}/c11.log"
 check "missing nginx dir: names SRC-Nginx"    grep -qi 'SRC-Nginx' "${TMP}/c11.log"
+
+# ---- php-facts path (preflight_skip_php=false): fake apt-cache on PATH ------
+# Regression coverage for the epoch/non-epoch "Candidate:" parsing — Ubuntu
+# 24.04's php-fpm candidate is unepoched, and an epoch-only regex used to
+# crash the whole play (`'NoneType' object is not iterable`) on that form.
+apt_shim() { # apt_shim <dir> <candidate-line> -> writes a fake apt-cache there
+  local dir="$1" candidate="$2"
+  mkdir -p "${dir}"
+  cat > "${dir}/apt-cache" <<SH
+#!/usr/bin/env bash
+cat <<OUT
+php-fpm:
+  Installed: (none)
+  Candidate: ${candidate}
+  Version table:
+     ${candidate} 500
+        500 http://archive.ubuntu.com/ubuntu noble/universe amd64 Packages
+OUT
+SH
+  chmod +x "${dir}/apt-cache"
+}
+
+# ---- 12. epoch candidate (e.g. Debian-style "2:8.3+93ubuntu2") --------------
+rm -rf "${DATA}"; mkdir -p "${DATA}/vol1"
+APTBIN="${TMP}/apt-epoch"; apt_shim "${APTBIN}" "2:8.3+93ubuntu2"
+PATH="${APTBIN}:${PATH}" ANSIBLE_ROLES_PATH="${PROV}/roles" "${PLAYBOOK}" "${TMP}/scratch.yaml" \
+  -e "storage_data_root=${DATA}" -e "nginx_confdir=${NGINXDIR}" \
+  -e "preflight_skip_php=false" -e "$(mounts "${DATA}/vol1:ext4")" \
+  > "${TMP}/c12.log" 2>&1
+check "php epoch candidate: play succeeds"    bash -c "! grep -q 'failed=1' '${TMP}/c12.log'"
+check "php epoch candidate: service resolved" grep -qF "php_fpm_service=[php8.3-fpm]" "${TMP}/c12.log"
+check "php epoch candidate: sock resolved"    grep -qF "php_fpm_sock=[/run/php/php8.3-fpm.sock]" "${TMP}/c12.log"
+
+# ---- 13. non-epoch candidate (Ubuntu 24.04's actual form) -> no crash -------
+rm -rf "${DATA}"; mkdir -p "${DATA}/vol1"
+APTBIN="${TMP}/apt-noepoch"; apt_shim "${APTBIN}" "8.3.6-1build1"
+PATH="${APTBIN}:${PATH}" ANSIBLE_ROLES_PATH="${PROV}/roles" "${PLAYBOOK}" "${TMP}/scratch.yaml" \
+  -e "storage_data_root=${DATA}" -e "nginx_confdir=${NGINXDIR}" \
+  -e "preflight_skip_php=false" -e "$(mounts "${DATA}/vol1:ext4")" \
+  > "${TMP}/c13.log" 2>&1
+check "php non-epoch candidate: play succeeds (no crash)" bash -c "! grep -q 'failed=1' '${TMP}/c13.log'"
+check "php non-epoch candidate: service resolved"         grep -qF "php_fpm_service=[php8.3-fpm]" "${TMP}/c13.log"
+check "php non-epoch candidate: sock resolved"             grep -qF "php_fpm_sock=[/run/php/php8.3-fpm.sock]" "${TMP}/c13.log"
 
 echo; [ "${FAIL}" -eq 0 ] && echo "ALL PASS" || { echo "${FAIL} FAILURES"; exit 1; }
