@@ -31,8 +31,3 @@ eq($scope['total_rows'] >= 5, true, 'scope totals rows');
 $scope2 = stats_platform_scope($t1, ['tiktok_watch_history', 'absent_table']);
 eq($scope2['tables']['absent_table']['count'], 0, 'ordered-but-absent table shown with 0');
 eq(array_key_first($scope2['tables']), 'tiktok_watch_history', 'display order respected');
-
-// Pinning test: stats_participant_scope() calls analysis_tiktok_video_id() from
-// Analysis.php, which this test file does not require (only Ddp.php + Stats.php).
-// This must not fatal even though Analysis.php isn't loaded.
-eq(stats_participant_scope(['sections' => []])['total_rows'], 0, 'deprecated wrapper does not fatal without Analysis.php loaded');

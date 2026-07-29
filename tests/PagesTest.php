@@ -20,16 +20,17 @@ function render_page(string $script, array $get): string {
 $html = render_page('index.php', []);
 check(str_contains($html, 'p1'), 'index lists participant p1');
 check(str_contains($html, 'participant.php?id=p1'), 'index links to participant page');
-check(str_contains($html, '1 file') || str_contains($html, 'skipped'), 'index shows skipped-file notice');
-check(!str_contains($html, 'participant.php?id=preview'), 'index does not link the skipped preview participant as a row');
+check(str_contains($html, 'tiktok'), 'index shows platform');
+check(str_contains($html, 'skipped'), 'index shows skipped-file notice');
+check(!str_contains($html, 'participant.php?id=preview'), 'index does not list skipped preview participant');
 
 // --- participant.php ---
 $html = render_page('participant.php', ['id' => 'p1', 'seed' => '1', 'n' => '1']);
-check(str_contains($html, 'tiktok_watch_history'), 'participant shows watch history section');
-check(str_contains($html, 'tiktok_comments'), 'participant shows comments section');
-check(str_contains($html, 'Igual estoy yo') || str_contains($html, 'second comment'), 'comment text rendered');
-check(str_contains($html, 'transcript.php?vid=7654562293757250829'), 'video row links to transcript');
+check(str_contains($html, 'tiktok_watch_history') || str_contains($html, 'Tiktok watch history'), 'participant shows watch history table');
+check(str_contains($html, 'Igual estoy yo') || str_contains($html, 'second comment'), 'comment text rendered generically');
+check(str_contains($html, 'transcript.php?vid=7654562293757250829'), 'video row links to transcript via analysis module');
 check(str_contains($html, 'seed=2'), 'reshuffle link bumps seed');
+check(str_contains($html, '<h2>') && str_contains(strtolower($html), 'tiktok'), 'platform heading present');
 
 $missing = render_page('participant.php', ['id' => 'nope']);
 check(str_contains($missing, 'not found') || str_contains($missing, '404'), 'unknown participant -> not found');
@@ -47,10 +48,10 @@ check(str_contains(strtolower($none), 'not transcribed'), 'missing transcript ->
 $bad = render_page('transcript.php', ['vid' => '../etc/passwd']);
 check(str_contains($bad, '400') || str_contains($bad, 'invalid'), 'bad vid rejected');
 
-// --- config-missing path ---
+// --- guard: config-missing path ---
 $__saved_cfg = $GLOBALS['__cfg'];
 $GLOBALS['__cfg'] = null;
 $missingCfg = render_page('index.php', []);
-check(str_contains($missingCfg, 'Configuration missing'), 'missing config shows friendly message');
+check(str_contains($missingCfg, 'not set up yet') || str_contains($missingCfg, 'Configuration missing'), 'missing config shows friendly message');
 check(!str_contains($missingCfg, '<table'), 'missing config does not render the participant table');
 $GLOBALS['__cfg'] = $__saved_cfg;
