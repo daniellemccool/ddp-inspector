@@ -12,7 +12,7 @@ function flows_parse_doc(string $text): ?array {
             continue;
         }
         if ($cur === null) { continue; }
-        if (preg_match('/^\|\s*`([^`]+)`\s*\|\s*(.*?)\s*\|$/', $line, $m)) {
+        if (preg_match('/^\|\s*`([^`]+)`\s*\|\s*(.*?)\s*\|\s*$/', $line, $m)) {
             $cur['vars'][] = $m[1]; $cur['var_desc'][$m[1]] = $m[2]; continue;
         }
         if (preg_match('/commit `([0-9a-f]{7,40})`/', $line, $m)) { $commit = $m[1]; }
