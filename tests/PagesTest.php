@@ -145,3 +145,20 @@ check(str_contains($guarded, 'setup.php'), 'guard message links to setup.php');
 check(!str_contains($guarded, '<table'), 'guard-blocked page renders no participant table');
 $GLOBALS['__cfg'] = $__saved_cfg_guard;
 exec('rm -rf ' . escapeshellarg($guardScratch));
+
+// §7 ground-truth guard: the generic path must reproduce exact per-table row
+// counts. Uses the synthetic examples/ dataset when present (regenerable via
+// examples/generate.py; counts fixed by its seed).
+$examples = __DIR__ . '/../examples/ddp';
+if (is_dir($examples)) {
+    $ex = ddp_load_dir($examples);
+    $one = $ex['participants']['1bf78505c54e3c4ce201abd7']['platforms']['tiktok']['tables'] ?? null;
+    check($one !== null, 'examples participant loads under tiktok platform');
+    if ($one !== null) {
+        eq(count($one['tiktok_watch_history']), 400, 'ground truth: watch rows');
+        eq(count($one['tiktok_favorite_videos']), 12, 'ground truth: favorites rows');
+        eq(count($one['tiktok_like_list']), 80, 'ground truth: likes rows');
+        eq(count($one['tiktok_share_history']), 5, 'ground truth: shares rows');
+        eq(count($one['tiktok_comments']), 8, 'ground truth: comments rows');
+    }
+}

@@ -1,11 +1,18 @@
 <?php
 return [
-    // Absolute path to the directory of TikTok DDP JSON files (read-only).
-    'ddp_dir'         => '/absolute/path/to/tiktok/ddp/files',
-    // Optional: sharded transcript tree (<last-2-digits>/<id>.txt|.json), or null.
+    // Provisioned mode: the inspector's namespace dir on the storage volume
+    // (e.g. '/data/<volume>/ddp-inspector'). When set, all data/config/state
+    // live under it and the setup wizard manages the study. null for dev mode.
+    'storage_root'    => null,
+    // Dev mode only (ignored when storage_root is set): donation JSON dir.
+    'ddp_dir'         => '/absolute/path/to/ddp/files',
+    // Dev mode only: sharded transcript tree (<last-2>/<id>.txt|.json), or null.
     'transcripts_dir' => null,
-    // Default sample size per section.
+    // Default sample size per table.
     'default_n'       => 15,
-    // URL prefix when served behind a reverse-proxy subpath (e.g. '/inspector'); '' at root.
+    // URL prefix behind a reverse-proxy subpath (e.g. '/inspector'); '' at root.
     'base_path'       => '',
+    // Binaries used by the setup wizard's connection test (PATH lookup).
+    'gocmd_bin'       => 'gocmd',
+    'rclone_bin'      => 'rclone',
 ];
