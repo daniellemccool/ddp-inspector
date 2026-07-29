@@ -241,6 +241,10 @@ function inst_handle_setup_post(array $post, array $files): array {
             if ($instance['local_path'] === '') { return $flash('error', 'Please fill in the folder path.'); }
         }
         if (!inst_save($instance)) { return $flash('error', 'Could not save — the storage volume may be full or read-only.'); }
+        if ($mode === 'local') {
+            $c = inst_paths()['config'];
+            if ($c !== null && is_file($c . '/source.json')) { @unlink($c . '/source.json'); }
+        }
         return $flash('ok', 'Saved ✓ — now run "Check & fetch" below.');
     }
     if ($action === 'check_fetch') {

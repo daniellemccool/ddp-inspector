@@ -29,6 +29,13 @@ $r = inst_handle_setup_post(['action' => 'save_source', 'csrf' => csrf_token(),
     'share_link' => 'https://researchdrive.surf.nl/index.php/s/AbCdEf123', 'link_password' => 'pw'], []);
 eq(inst_source_load()['share_token'], 'AbCdEf123', 'share token from link');
 eq(inst_source_load()['webdav_url'], 'https://researchdrive.surf.nl/public.php/dav/files/AbCdEf123/', 'webdav url derived (modern form)');
+check(inst_source_exists(), 'rd-link source.json exists before switching to local mode');
+
+$r = inst_handle_setup_post(['action' => 'save_source', 'csrf' => csrf_token(),
+    'source_mode' => 'local', 'study_name' => 'Local study', 'local_path' => '/tmp/some-donations'], []);
+eq($r['flash'][0]['kind'], 'ok', 'local source saved');
+eq(inst_source_exists(), false, 'switching to local mode deletes stale source.json');
+check(!is_file("$scratch2/config/source.json"), 'source.json removed from disk on local mode switch');
 
 $r = inst_handle_setup_post(['action' => 'refresh_now', 'csrf' => csrf_token()], []);
 check(is_file("$scratch2/state/refresh-requested"), 'refresh flag touched by handler');
