@@ -7,13 +7,17 @@ $p1  = $dir . '/assignment=1_task=1_participant=p1_source=tiktok_key=1-tiktok.js
 eq(ddp_participant_id_from_filename($p1), 'p1', 'participant id from filename');
 eq(ddp_participant_id_from_filename('/x/no-segment.json'), 'no-segment', 'participant id falls back to stem');
 
-$sections = ddp_parse_file($p1);
-eq(is_array($sections), true, 'parse returns array for conforming file');
-eq(count($sections['tiktok_watch_history']), 3, 'watch history rows');
-eq($sections['tiktok_watch_history'][0]['Link'], 'https://www.tiktokv.com/share/video/7654562293757250829/', 'watch link');
-eq(isset($sections['deleted row count']), false, 'non-array keys ignored');
+$parsed = ddp_parse_file($p1);
+eq(is_array($parsed), true, 'parse returns array for conforming file');
+eq(count($parsed['tables']['tiktok_watch_history']), 3, 'watch history rows');
+eq($parsed['tables']['tiktok_watch_history'][0]['Link'], 'https://www.tiktokv.com/share/video/7654562293757250829/', 'watch link');
+eq(isset($parsed['tables']['deleted row count']), false, 'scalar keys not tables');
+eq($parsed['deleted']['tiktok_watch_history'], 0, 'deleted count captured (zero)');
 
 eq(ddp_parse_file($dir . '/assignment=1_task=1_participant=preview_source=tiktok_key=2-tiktok.json'), null, 'preview stub is skipped (null)');
+
+$p2 = ddp_parse_file(__DIR__ . '/fixtures/ddp2/assignment=1_task=1_participant=p2_source=instagram_key=5-instagram.json');
+eq($p2['deleted']['instagram_followers'], 2, 'nonzero deleted count captured');
 
 $loaded = ddp_load_dir($dir);
 eq(array_keys($loaded['participants']), ['p1'], 'only conforming participant loaded');

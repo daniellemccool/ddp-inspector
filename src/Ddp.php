@@ -25,29 +25,32 @@ function ddp_participant_id_from_filename(string $path): string {
     return ddp_file_meta($path)['participant'];
 }
 
-/** @return array<string,list<array>>|null */
+/** @return array{tables: array<string,list<array>>, deleted: array<string,int>}|null */
 function ddp_parse_file(string $path): ?array {
     $raw = @file_get_contents($path);
     if ($raw === false) { return null; }
     $data = json_decode($raw, true);
     if (!is_array($data) || !array_is_list($data)) { return null; }
-    $out = [];
+    $tables = []; $deleted = [];
     foreach ($data as $element) {
         if (!is_array($element)) { continue; }
+        $del = isset($element['deleted row count']) ? (int)$element['deleted row count'] : 0;
         foreach ($element as $key => $value) {
-            if (!is_array($value)) { continue; } // skips "deleted row count" and scalars
-            $out[$key] = array_merge($out[$key] ?? [], array_values($value));
+            if (!is_array($value) || !array_is_list($value)) { continue; }
+            $rows = array_values(array_filter($value, 'is_array'));
+            $tables[$key] = array_merge($tables[$key] ?? [], $rows);
+            $deleted[$key] = ($deleted[$key] ?? 0) + $del;
         }
     }
-    return $out;
+    return ['tables' => $tables, 'deleted' => $deleted];
 }
 
 function ddp_load_dir(string $dir): array {
     $participants = [];
     $skipped = [];
     foreach (glob(rtrim($dir, '/') . '/*.json') ?: [] as $path) {
-        $sections = ddp_parse_file($path);
-        if ($sections === null) {
+        $parsed = ddp_parse_file($path);
+        if ($parsed === null) {
             $skipped[] = ['path' => basename($path), 'reason' => 'not a DDP array (skipped)'];
             continue;
         }
@@ -56,7 +59,7 @@ function ddp_load_dir(string $dir): array {
             $participants[$id] = ['id' => $id, 'files' => [], 'sections' => []];
         }
         $participants[$id]['files'][] = basename($path);
-        foreach ($sections as $name => $rows) {
+        foreach ($parsed['tables'] as $name => $rows) {
             $participants[$id]['sections'][$name] =
                 array_merge($participants[$id]['sections'][$name] ?? [], $rows);
         }
