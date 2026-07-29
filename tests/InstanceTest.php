@@ -100,4 +100,22 @@ eq($probe['ok'], false, 'rd-link probe fails when both endpoint forms fail');
 eq(inst_source_load()['webdav_url'], 'https://uu.data.surf.nl/public.php/webdav/',
    'failed probe does not rewrite source.json');
 
+$_COOKIE['ddpi_csrf'] = '';
+$tok = csrf_token();
+check(strlen($tok) >= 32, 'csrf token generated');
+eq(csrf_token(), $tok, 'csrf token stable within request');
+$_POST['csrf'] = $tok;
+eq(csrf_ok(), true, 'matching token accepted');
+$_POST['csrf'] = 'wrong';
+eq(csrf_ok(), false, 'wrong token rejected');
+check(str_contains(csrf_field(), $tok), 'csrf field embeds token');
+$_POST = [];
+
+// guard: unconfigured storage mode -> setup pointer, no crash
+inst_save(['study_name' => '', 'source_mode' => 'local', 'local_path' => null, 'cadence' => 'off', 'default_n' => 15]);
+@unlink("$scratch/config/instance.json");
+ob_start(); $ok = guard_configured(); $out = ob_get_clean();
+eq($ok, false, 'guard blocks unconfigured instance');
+check(str_contains($out, 'setup.php'), 'guard points at setup');
+
 $GLOBALS['__cfg'] = $GLOBALS['__cfg_saved_inst'];
