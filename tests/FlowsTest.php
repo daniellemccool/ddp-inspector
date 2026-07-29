@@ -83,3 +83,41 @@ eq($all['tiktok']['platform_title'], 'TikTok', 'tiktok doc parsed via flows_load
 $GLOBALS['__cfg'] = $GLOBALS['__cfg_saved_flows'];
 exec('rm -rf ' . escapeshellarg($flows_scratch));
 exec('rm -rf ' . escapeshellarg($flows_empty_scratch));
+
+// Build a valid export zip programmatically (PharData writes zips fine).
+$tmpdir = sys_get_temp_dir() . '/ddp-flows-test-' . getmypid();
+exec('rm -rf ' . escapeshellarg($tmpdir)); mkdir($tmpdir, 0755, true);
+$zipPath = "$tmpdir/build_1785315943.zip";
+$phar = new PharData($zipPath);
+$phar->addFromString('documentation.txt', (string)file_get_contents(__DIR__ . '/fixtures/flows/facebook/documentation.txt'));
+$phar->addFromString('build_znptwlaf_facebook_development_2026-07-29_11-03-36.zip', 'dummy-inner-zip-bytes');
+unset($phar);
+
+eq(flows_slug_from_build_name('build_p_izzeui_instagram_development_2026-07-29_11-05-27.zip'), 'instagram', 'slug from long build name');
+eq(flows_slug_from_build_name('build_pismrnul_chatgpt_development_2026-07-29_11-01-52.zip'), 'chatgpt', 'slug from short build name');
+eq(flows_slug_from_build_name('random.zip'), null, 'non-build name -> null');
+
+$flowsDir = "$tmpdir/flows";
+$r = flows_ingest_upload($zipPath, $flowsDir);
+eq($r['ok'], true, 'valid export ingested');
+eq($r['slug'], 'facebook', 'slug detected');
+eq($r['table_count'], 3, 'table count reported');
+check(is_file("$flowsDir/facebook/documentation.txt"), 'documentation installed');
+$meta = json_decode((string)file_get_contents("$flowsDir/facebook/build-meta.json"), true);
+eq($meta['commit'], '356f6e10dbb38dbf1eb69eea220c68a5c0f47ff3', 'build-meta commit');
+eq($meta['build_zip_name'], 'build_znptwlaf_facebook_development_2026-07-29_11-03-36.zip', 'build-meta zip name');
+check(isset($meta['uploaded_at']), 'build-meta timestamp present');
+
+// Rejections stay friendly.
+$bad = "$tmpdir/notazip.zip"; file_put_contents($bad, 'not a zip at all');
+$r = flows_ingest_upload($bad, $flowsDir);
+eq($r['ok'], false, 'garbage rejected');
+check(!str_contains($r['message'], 'Phar'), 'rejection message plain-language');
+
+$noDoc = "$tmpdir/nodoc.zip";
+$phar = new PharData($noDoc);
+$phar->addFromString('build_x_y_tiktok_development_2026-01-01_00-00-00.zip', 'x');
+unset($phar);
+$r = flows_ingest_upload($noDoc, $flowsDir);
+eq($r['ok'], false, 'missing documentation rejected');
+check(str_contains($r['message'], 'documentation'), 'missing-doc message names the problem');
