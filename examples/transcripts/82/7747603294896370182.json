@@ -1,0 +1,88 @@
+{
+ "video_id": "7747603294896370182",
+ "source_url": "https://www.tiktokv.com/share/video/7747603294896370182/",
+ "duration_s": 33.3,
+ "language_detected": "en",
+ "transcribed_at": "2026-07-10T09:30:00Z",
+ "fetcher": "ytdlp",
+ "transcript_source": "whisper-rs",
+ "model": "small",
+ "raw_signals": {
+  "schema_version": "1",
+  "language": "en",
+  "lang_probs": null,
+  "segments": [
+   {
+    "no_speech_prob": 7.656835003638463e-10,
+    "tokens": [
+     {
+      "id": 50365,
+      "text": "[_BEG_]",
+      "p": 0.62,
+      "plog": -0.478
+     },
+     {
+      "id": 1000,
+      "text": "muffled",
+      "p": 0.2896,
+      "plog": -0.5908
+     },
+     {
+      "id": 1001,
+      "text": " audio",
+      "p": 0.1861,
+      "plog": -0.7978
+     },
+     {
+      "id": 1002,
+      "text": " near",
+      "p": 0.3798,
+      "plog": -0.153
+     },
+     {
+      "id": 1003,
+      "text": " the",
+      "p": 0.2231,
+      "plog": -0.0828
+     },
+     {
+      "id": 1004,
+      "text": " parade",
+      "p": 0.3066,
+      "plog": -0.7928
+     },
+     {
+      "id": 1005,
+      "text": " hard",
+      "p": 0.1811,
+      "plog": -0.4557
+     },
+     {
+      "id": 1006,
+      "text": " to",
+      "p": 0.3796,
+      "plog": -0.7491
+     },
+     {
+      "id": 1007,
+      "text": " make",
+      "p": 0.2227,
+      "plog": -0.6918
+     },
+     {
+      "id": 1008,
+      "text": " out",
+      "p": 0.4028,
+      "plog": -0.4082
+     },
+     {
+      "id": 50579,
+      "text": "[_TT_200]",
+      "p": 0.51,
+      "plog": -0.67
+     }
+    ]
+   }
+  ]
+ }
+}

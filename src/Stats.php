@@ -1,16 +1,4 @@
 <?php
-const DDP_VIDEO_SECTIONS = [
-    'tiktok_watch_history',
-    'tiktok_favorite_videos',
-    'tiktok_like_list',
-];
-
-function stats_canonical_video_id(string $url): ?string {
-    $re = '~^https?://(?:www\.)?(?:tiktokv|tiktok)\.com/(?:share/video|@[^/]+/video)/(\d{19})(?:/|\?|$)~';
-    if (preg_match($re, $url, $m)) { return $m[1]; }
-    return null;
-}
-
 function stats_parse_date(string $s): ?int {
     $s = trim($s);
     $hasUtc = str_ends_with($s, ' UTC');
@@ -22,12 +10,32 @@ function stats_parse_date(string $s): ?int {
     return $dt->getTimestamp();
 }
 
+function stats_parse_date_any(string $s): ?int {
+    $ts = stats_parse_date($s);
+    if ($ts !== null) { return $ts; }
+    $s = trim($s);
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:?\d{2})?$/', $s)) { return null; }
+    try { $dt = new DateTimeImmutable($s, new DateTimeZone('UTC')); } catch (Exception) { return null; }
+    // Reject inputs DateTimeImmutable silently overflowed (e.g. Feb 30 -> Mar 2)
+    if ($dt->format('Y-m-d\TH:i:s') !== substr($s, 0, 19)) { return null; }
+    return $dt->getTimestamp();
+}
+
+function stats_row_date(array $row): ?int {
+    foreach (['Date', 'Timestamp', 'Time', 'time'] as $col) {
+        if (!isset($row[$col]) || !is_scalar($row[$col])) { continue; }
+        $ts = stats_parse_date_any((string)$row[$col]);
+        if ($ts !== null) { return $ts; }
+    }
+    return null;
+}
+
 /** @param list<array> $rows */
 function stats_section_summary(array $rows): array {
     $count = count($rows);
     $earliest = null; $latest = null;
     foreach ($rows as $row) {
-        $ts = isset($row['Date']) ? stats_parse_date((string)$row['Date']) : null;
+        $ts = stats_row_date($row);
         if ($ts === null) { continue; }
         if ($earliest === null || $ts < $earliest) { $earliest = $ts; }
         if ($latest === null || $ts > $latest) { $latest = $ts; }
@@ -35,36 +43,16 @@ function stats_section_summary(array $rows): array {
     return ['count' => $count, 'earliest' => $earliest, 'latest' => $latest];
 }
 
-function stats_unique_video_count(array $sections): int {
-    $ids = [];
-    foreach (DDP_VIDEO_SECTIONS as $name) {
-        foreach ($sections[$name] ?? [] as $row) {
-            if (!isset($row['Link'])) { continue; }
-            $id = stats_canonical_video_id((string)$row['Link']);
-            if ($id !== null) { $ids[$id] = true; }
-        }
-    }
-    return count($ids);
-}
-
-function stats_participant_scope(array $participant): array {
-    $sections = $participant['sections'];
-    $ordered = [];
-    $extras = array_values(array_filter(array_keys($sections), fn($n) => !in_array($n, DDP_SECTION_ORDER, true)));
-    $names = array_merge(DDP_SECTION_ORDER, $extras);
-    $total = 0; $earliest = null; $latest = null;
+/** @param array<string,list<array>> $tables @param list<string> $order */
+function stats_platform_scope(array $tables, array $order): array {
+    $out = []; $total = 0; $earliest = null; $latest = null;
+    $names = array_values(array_unique(array_merge($order, array_keys($tables))));
     foreach ($names as $name) {
-        $s = stats_section_summary($sections[$name] ?? []);
-        $ordered[$name] = $s;
+        $s = stats_section_summary($tables[$name] ?? []);
+        $out[$name] = $s;
         $total += $s['count'];
         if ($s['earliest'] !== null && ($earliest === null || $s['earliest'] < $earliest)) { $earliest = $s['earliest']; }
         if ($s['latest'] !== null && ($latest === null || $s['latest'] > $latest)) { $latest = $s['latest']; }
     }
-    return [
-        'sections' => $ordered,
-        'unique_videos' => stats_unique_video_count($sections),
-        'total_rows' => $total,
-        'earliest' => $earliest,
-        'latest' => $latest,
-    ];
+    return ['tables' => $out, 'total_rows' => $total, 'earliest' => $earliest, 'latest' => $latest];
 }

@@ -13,3 +13,10 @@ transcripts/
 !tests/fixtures/
 !tests/fixtures/**/
 !tests/fixtures/**
+
+# Synthetic example dataset (examples/generate.py) must be committed despite
+# the donor-data patterns above
+!examples/ddp/*.json
+!examples/transcripts/
+!examples/transcripts/**/
+!examples/transcripts/**

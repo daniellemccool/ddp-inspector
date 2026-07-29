@@ -1,0 +1,141 @@
+{
+ "video_id": "7524916040270350977",
+ "source_url": "https://www.tiktokv.com/share/video/7524916040270350977/",
+ "duration_s": 14.3,
+ "language_detected": "en",
+ "transcribed_at": "2026-07-10T09:30:00Z",
+ "fetcher": "ytdlp",
+ "transcript_source": "whisper-rs",
+ "model": "small",
+ "raw_signals": {
+  "schema_version": "1",
+  "language": "en",
+  "lang_probs": null,
+  "segments": [
+   {
+    "no_speech_prob": 6.812612226786625e-10,
+    "tokens": [
+     {
+      "id": 50365,
+      "text": "[_BEG_]",
+      "p": 0.62,
+      "plog": -0.478
+     },
+     {
+      "id": 1000,
+      "text": "what",
+      "p": 0.9518,
+      "plog": -0.5296
+     },
+     {
+      "id": 1001,
+      "text": " actually",
+      "p": 0.9289,
+      "plog": -0.5068
+     },
+     {
+      "id": 1002,
+      "text": " happens",
+      "p": 0.9188,
+      "plog": -0.5337
+     },
+     {
+      "id": 1003,
+      "text": " after",
+      "p": 0.8601,
+      "plog": -0.4411
+     },
+     {
+      "id": 1004,
+      "text": " you",
+      "p": 0.8581,
+      "plog": -0.027
+     },
+     {
+      "id": 1005,
+      "text": " file",
+      "p": 0.771,
+      "plog": -0.6666
+     },
+     {
+      "id": 1006,
+      "text": " a",
+      "p": 0.9556,
+      "plog": -0.3814
+     },
+     {
+      "id": 1007,
+      "text": " report",
+      "p": 0.7593,
+      "plog": -0.5059
+     },
+     {
+      "id": 50579,
+      "text": "[_TT_200]",
+      "p": 0.51,
+      "plog": -0.67
+     }
+    ]
+   },
+   {
+    "no_speech_prob": 7.202705804711573e-10,
+    "tokens": [
+     {
+      "id": 50365,
+      "text": "[_BEG_]",
+      "p": 0.62,
+      "plog": -0.478
+     },
+     {
+      "id": 1050,
+      "text": "step",
+      "p": 0.8615,
+      "plog": -0.6531
+     },
+     {
+      "id": 1051,
+      "text": " one",
+      "p": 0.7364,
+      "plog": -0.1292
+     },
+     {
+      "id": 1052,
+      "text": " talk",
+      "p": 0.7725,
+      "plog": -0.5126
+     },
+     {
+      "id": 1053,
+      "text": " to",
+      "p": 0.7596,
+      "plog": -0.6486
+     },
+     {
+      "id": 1054,
+      "text": " the",
+      "p": 0.8567,
+      "plog": -0.4895
+     },
+     {
+      "id": 1055,
+      "text": " desk",
+      "p": 0.7465,
+      "plog": -0.4154
+     },
+     {
+      "id": 1056,
+      "text": " officer",
+      "p": 0.8094,
+      "plog": -0.1602
+     },
+     {
+      "id": 50579,
+      "text": "[_TT_201]",
+      "p": 0.51,
+      "plog": -0.67
+     }
+    ]
+   }
+  ]
+ }
+}

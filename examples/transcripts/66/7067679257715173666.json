@@ -1,0 +1,10 @@
+{
+ "video_id": "7067679257715173666",
+ "source_url": "https://www.tiktokv.com/share/video/7067679257715173666/",
+ "duration_s": 21.0,
+ "language_detected": "en",
+ "transcribed_at": "2026-05-02T14:00:00Z",
+ "fetcher": "ytdlp",
+ "transcript_source": "whisper-rs",
+ "model": "small"
+}

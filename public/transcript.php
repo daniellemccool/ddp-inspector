@@ -6,6 +6,7 @@ if (!cfg_ready()) {
     echo 'Configuration missing. Copy config.php.example to config.php.';
     return;
 }
+if (!guard_configured()) { return; }
 
 $vid = is_string($_GET['vid'] ?? null) ? $_GET['vid'] : '';
 if (!preg_match('/^\d{19}$/D', $vid)) {
@@ -14,13 +15,9 @@ if (!preg_match('/^\d{19}$/D', $vid)) {
     return;
 }
 
-$dir = cfg('transcripts_dir');
-$txt = null; $meta = null;
-if ($dir) {
-    $base = rtrim((string)$dir, '/') . '/' . substr($vid, -2) . '/' . $vid;
-    if (is_file($base . '.txt'))  { $txt  = file_get_contents($base . '.txt'); }
-    if (is_file($base . '.json')) { $meta = json_decode((string)file_get_contents($base . '.json'), true); }
-}
+$paths = analysis_transcript_paths($vid);
+$txt = $paths['txt'] !== null ? file_get_contents($paths['txt']) : null;
+$meta = $paths['json'] !== null ? json_decode((string)file_get_contents($paths['json']), true) : null;
 
 /**
  * Segment text + average token confidence, skipping special tokens
