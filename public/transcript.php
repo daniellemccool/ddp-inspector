@@ -46,8 +46,46 @@ $seg_info = function (array $seg): array {
   <?php if ($txt === null && $meta === null): ?>
     <p class="notice">Not transcribed yet.</p>
   <?php else: ?>
+    <?php
+      $vm = is_array($meta['video_metadata'] ?? null) ? $meta['video_metadata'] : [];
+      $srcUrl = (string)($meta['source_url'] ?? '');
+      $srcOk = preg_match('~^https?://~', $srcUrl) === 1;
+      $lang = lang_name(is_string($meta['language_detected'] ?? null) ? $meta['language_detected'] : null);
+      $byline = [];
+      if (($vm['uploader'] ?? '') !== '') { $byline[] = '@' . $vm['uploader']; }
+      if (($vm['video_created_at'] ?? '') !== '') { $byline[] = 'posted ' . fmt_date_iso((string)$vm['video_created_at']); }
+      if ($lang !== null) { $byline[] = $lang; }
+      $stats = [];
+      foreach ([['view_count', 'views'], ['like_count', 'likes'], ['comment_count', 'comments']] as [$k, $label]) {
+        if (is_numeric($vm[$k] ?? null)) {
+          $stats[] = '<span title="' . h(number_format((int)$vm[$k])) . '">' . h(fmt_compact((int)$vm[$k])) . ' ' . $label . '</span>';
+        }
+      }
+    ?>
+    <?php if ($vm !== [] || $srcOk || $lang !== null): ?>
+      <section class="videometa">
+        <?php if (($vm['video_description'] ?? '') !== ''): ?>
+          <p class="eyebrow">video caption</p>
+          <p class="desc"><?= preg_replace('/(#\w+)/u', '<span class="tag">$1</span>', h((string)$vm['video_description'])) ?></p>
+        <?php endif; ?>
+        <?php if ($byline !== []): ?><p class="byline"><?= h(implode(' · ', $byline)) ?></p><?php endif; ?>
+        <?php if ($stats !== []): ?><p class="vstats"><?= implode(' · ', $stats) ?></p><?php endif; ?>
+        <p class="meta">
+          <?php if ($srcOk): ?><a href="<?= h($srcUrl) ?>" rel="noreferrer noopener" target="_blank">watch on TikTok ↗</a><?php endif; ?>
+          <?php if (($vm['metadata_fetched_at'] ?? '') !== ''): ?>
+            <?= $srcOk ? '·' : '' ?> metadata fetched <?= h(fmt_date_iso((string)$vm['metadata_fetched_at'])) ?>
+          <?php elseif ($vm === []): ?>
+            <?= $srcOk ? '·' : '' ?> no video metadata available for this video (yet)
+          <?php endif; ?>
+        </p>
+      </section>
+    <?php endif; ?>
     <?php if ($txt !== null): ?>
-      <pre class="transcript"><?= h((string)$txt) ?></pre>
+      <?php $dur = is_numeric($meta['duration_s'] ?? null)
+          ? sprintf('%d:%02d', intdiv((int)round((float)$meta['duration_s']), 60), (int)round((float)$meta['duration_s']) % 60)
+          : null; ?>
+      <p class="eyebrow">spoken transcript<?= $dur !== null ? ' · ' . h($dur) : '' ?></p>
+      <blockquote class="transcript-block"><?= h((string)$txt) ?></blockquote>
     <?php else: ?>
       <p class="notice">(transcript text file missing)</p>
     <?php endif; ?>

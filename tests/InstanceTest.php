@@ -154,6 +154,16 @@ $c['_mtime'] = 1;
 inst_write_json_atomic($cacheFile, $c);
 eq(ddp_summarize_file_cached($fixture)['participant'], 'p1', 'stale cache recomputed');
 
+// coverage fingerprint: same file, changed transcript state -> recompute
+$ctxA = ['ids' => [], 'fp' => 'fpA'];
+ddp_summarize_file_cached($fixture, $ctxA);
+$c2 = inst_read_json($cacheFile);
+eq($c2['_ctx_fp'] ?? null, 'fpA', 'ctx fingerprint stored in cache');
+$c2['summary']['participant'] = 'sentinel-ctx';
+inst_write_json_atomic($cacheFile, $c2);
+eq(ddp_summarize_file_cached($fixture, $ctxA)['participant'], 'sentinel-ctx', 'matching fingerprint served from cache');
+eq(ddp_summarize_file_cached($fixture, ['ids' => [], 'fp' => 'fpB'])['participant'], 'p1', 'changed fingerprint recomputed');
+
 // local-folder candidate discovery (bounded scan, own tree excluded)
 $scan = $scratch . '/scan';
 mkdir("$scan/vol1/inbox", 0777, true);

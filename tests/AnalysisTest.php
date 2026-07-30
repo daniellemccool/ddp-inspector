@@ -18,3 +18,15 @@ $tp = analysis_transcript_paths('7654562293757250829');
 check($tp['txt'] !== null && str_ends_with($tp['txt'], '/29/7654562293757250829.txt'), 'sharded txt path resolved');
 $missing = analysis_transcript_paths('1111111111111111111');
 eq($missing['txt'], null, 'missing transcript -> null txt');
+
+// row filtering by available artifacts: linked+available and unlinkable stay
+$rows = [
+    ['Link' => 'https://www.tiktokv.com/share/video/7654562293757250829/'],
+    ['Link' => 'https://www.tiktokv.com/share/video/7640857640611925279/'],
+    ['Comment' => 'no link at all'],
+];
+[$kept, $hidden] = analysis_filter_rows_with_artifacts('tiktok', $rows, ['7654562293757250829' => true]);
+eq(count($kept), 2, 'filter keeps available + unlinkable rows');
+eq($hidden, 1, 'filter hides untranscribed linked row');
+[$kept2, $hidden2] = analysis_filter_rows_with_artifacts('instagram', $rows, []);
+eq([count($kept2), $hidden2], [3, 0], 'filter is a no-op for platforms without modules');

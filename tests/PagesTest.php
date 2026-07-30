@@ -41,6 +41,15 @@ check(str_contains($ok, 'Hello world this is a test'), 'transcript text rendered
 check(str_contains($ok, '0.42') || str_contains($ok, 'low'), 'low-confidence segment surfaced');
 check(str_contains($ok, '<td>Hello world</td>'), 'segment text derived from tokens, marker tokens skipped');
 check(str_contains($ok, '<td>this is a test</td>'), 'derived segment text trimmed of leading token space');
+check(str_contains($ok, 'Fixture video about testing'), 'video metadata: description rendered');
+check(str_contains($ok, '@fixtureuser'), 'video metadata: uploader rendered');
+check(str_contains($ok, 'posted 19 Apr 2026, 10:28'), 'video metadata: pretty date');
+check(str_contains($ok, '11.4M views') && str_contains($ok, '1.1M likes') && str_contains($ok, '3,181 comments'),
+      'video metadata: compact counts');
+check(str_contains($ok, 'title="11,400,000"'), 'video metadata: full count in title attr');
+check(str_contains($ok, 'English'), 'video metadata: language name');
+check(preg_match('~<a href="https?://[^"]+" rel="noreferrer noopener" target="_blank">watch on TikTok~', $ok) === 1,
+      'video metadata: source url clickable');
 
 $none = render_page('transcript.php', ['vid' => '1111111111111111111']);
 check(str_contains(strtolower($none), 'not transcribed'), 'missing transcript -> not transcribed');

@@ -39,6 +39,45 @@ function analysis_row_links(string $platform, array $row): array {
     return $links;
 }
 
+/** Set (id => true) of entity ids with an artifact in the module's sharded
+ *  tree — one directory sweep, so membership checks are memory-cheap. */
+function analysis_available_ids(string $name): array {
+    $dir = analysis_dir($name);
+    if ($dir === null || !is_dir($dir)) { return []; }
+    $out = [];
+    foreach (glob($dir . '/*', GLOB_ONLYDIR) ?: [] as $shard) {
+        foreach (glob($shard . '/*.{txt,json}', GLOB_BRACE) ?: [] as $f) {
+            $out[pathinfo($f, PATHINFO_FILENAME)] = true;
+        }
+    }
+    return $out;
+}
+
+/** Cheap staleness fingerprint for coverage numbers baked into summary
+ *  caches: changes whenever a refresh lands or the artifact count moves. */
+function analysis_ids_fingerprint(array $ids): string {
+    $st = function_exists('inst_status') ? inst_status() : [];
+    return (string)($st['finished_at'] ?? '') . ':' . count($ids);
+}
+
+/** Keep rows whose linked entity has an artifact available; rows with no
+ *  linkable entity at all (comments, searches, …) always stay.
+ *  @return array{0: list<array>, 1: int} [kept rows, hidden count] */
+function analysis_filter_rows_with_artifacts(string $platform, array $rows, array $ids): array {
+    $mods = array_filter(analysis_modules(), fn($m) => $m['platform'] === $platform);
+    if ($mods === []) { return [$rows, 0]; }
+    $kept = []; $hidden = 0;
+    foreach ($rows as $row) {
+        $id = null;
+        foreach ($mods as $mod) {
+            $id = ($mod['entity_id'])($row);
+            if ($id !== null) { break; }
+        }
+        if ($id === null || isset($ids[$id])) { $kept[] = $row; } else { $hidden++; }
+    }
+    return [$kept, $hidden];
+}
+
 /** @return array{txt:?string, json:?string} */
 function analysis_transcript_paths(string $vid): array {
     $dir = analysis_dir('transcripts');
