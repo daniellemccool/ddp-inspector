@@ -18,6 +18,34 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
 function url(string $rel): string { $base = rtrim((string)cfg('base_path', ''), '/'); return $base === '' ? $rel : $base . '/' . ltrim($rel, '/'); }
 function fmt_ts(?int $ts): string { return $ts === null ? '—' : gmdate('Y-m-d H:i', $ts); }
 
+/** Human-scale counts: 3,181 · 11.4M · 1.1B (full value belongs in a title attr). */
+function fmt_compact(int $n): string {
+    if ($n < 10000) { return number_format($n); }
+    foreach ([[1e9, 'B'], [1e6, 'M'], [1e3, 'K']] as [$div, $suffix]) {
+        if ($n >= $div) {
+            $v = $n / $div;
+            return ($v >= 100 ? number_format($v) : number_format($v, 1)) . $suffix;
+        }
+    }
+    return number_format($n);
+}
+
+/** ISO-8601 → "19 Apr 2026, 10:28" (UTC); unparseable input passes through. */
+function fmt_date_iso(?string $s): string {
+    if ($s === null || trim($s) === '') { return '—'; }
+    $ts = stats_parse_date_any($s);
+    return $ts === null ? $s : gmdate('j M Y, H:i', $ts);
+}
+
+function lang_name(?string $code): ?string {
+    if ($code === null || $code === '') { return null; }
+    $names = ['en' => 'English', 'nl' => 'Dutch', 'de' => 'German', 'fr' => 'French',
+              'es' => 'Spanish', 'it' => 'Italian', 'pt' => 'Portuguese', 'ar' => 'Arabic',
+              'tr' => 'Turkish', 'ru' => 'Russian', 'zh' => 'Chinese', 'ja' => 'Japanese',
+              'ko' => 'Korean', 'id' => 'Indonesian', 'hi' => 'Hindi', 'pl' => 'Polish'];
+    return $names[strtolower($code)] ?? strtoupper($code);
+}
+
 function csrf_token(): string {
     if (!isset($_COOKIE['ddpi_csrf']) || strlen((string)$_COOKIE['ddpi_csrf']) < 32) {
         $_COOKIE['ddpi_csrf'] = bin2hex(random_bytes(16));
