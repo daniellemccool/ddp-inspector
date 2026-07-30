@@ -39,6 +39,27 @@ function analysis_row_links(string $platform, array $row): array {
     return $links;
 }
 
+/** Set (id => true) of entity ids with an artifact in the module's sharded
+ *  tree — one directory sweep, so membership checks are memory-cheap. */
+function analysis_available_ids(string $name): array {
+    $dir = analysis_dir($name);
+    if ($dir === null || !is_dir($dir)) { return []; }
+    $out = [];
+    foreach (glob($dir . '/*', GLOB_ONLYDIR) ?: [] as $shard) {
+        foreach (glob($shard . '/*.{txt,json}', GLOB_BRACE) ?: [] as $f) {
+            $out[pathinfo($f, PATHINFO_FILENAME)] = true;
+        }
+    }
+    return $out;
+}
+
+/** Cheap staleness fingerprint for coverage numbers baked into summary
+ *  caches: changes whenever a refresh lands or the artifact count moves. */
+function analysis_ids_fingerprint(array $ids): string {
+    $st = function_exists('inst_status') ? inst_status() : [];
+    return (string)($st['finished_at'] ?? '') . ':' . count($ids);
+}
+
 /** @return array{txt:?string, json:?string} */
 function analysis_transcript_paths(string $vid): array {
     $dir = analysis_dir('transcripts');

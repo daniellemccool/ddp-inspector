@@ -70,7 +70,7 @@ function ddp_load_dir(string $dir): array {
     foreach (glob(rtrim($dir, '/') . '/*.json') ?: [] as $path) {
         $parsed = ddp_parse_file($path);
         if ($parsed === null) {
-            $skipped[] = ['path' => basename($path), 'reason' => 'not a donation file (skipped)'];
+            $skipped[] = ddp_skip_entry($path);
             continue;
         }
         $meta = ddp_file_meta($path);
@@ -83,8 +83,25 @@ function ddp_load_dir(string $dir): array {
     return ['participants' => $participants, 'skipped' => $skipped];
 }
 
-/** Small, cacheable per-file summary: meta + per-table stats, no row data. */
-function ddp_summarize_file(string $path): ?array {
+/** Why a file didn't parse as a donation: participants can decline, uploads
+ *  can arrive empty — both are normal campaign artifacts, not errors. */
+function ddp_classify_nonconforming(string $path): string {
+    $head = (string)@file_get_contents($path, false, null, 0, 4096);
+    if (trim($head) === '') { return 'empty'; }
+    $j = json_decode($head, true);
+    if (is_array($j) && str_contains(strtolower((string)($j['status'] ?? '')), 'declined')) { return 'declined'; }
+    return 'invalid';
+}
+
+function ddp_skip_entry(string $path): array {
+    return ['path' => basename($path), 'participant' => ddp_file_meta($path)['participant'],
+            'kind' => ddp_classify_nonconforming($path), 'reason' => 'not a donation file (skipped)'];
+}
+
+/** Small, cacheable per-file summary: meta + per-table stats, no row data.
+ *  With $ctx (['ids' => set, 'fp' => string]) also counts how many of the
+ *  file's linked videos have an artifact available (coverage). */
+function ddp_summarize_file(string $path, ?array $ctx = null): ?array {
     $parsed = ddp_parse_file($path);
     if ($parsed === null) { return null; }
     $meta = ddp_file_meta($path);
@@ -92,46 +109,65 @@ function ddp_summarize_file(string $path): ?array {
     foreach ($parsed['tables'] as $name => $rows) {
         $tables[$name] = stats_section_summary($rows);
     }
-    return ['file' => basename($path), 'participant' => $meta['participant'],
+    $sum = ['file' => basename($path), 'participant' => $meta['participant'],
             'source' => $meta['source'], 'key_millis' => $meta['key_millis'],
             'tables' => $tables, 'deleted' => $parsed['deleted']];
+    if ($ctx !== null) {
+        $ids = [];
+        $mods = array_filter(analysis_modules(), fn($m) => $m['platform'] === $meta['source']);
+        foreach ($parsed['tables'] as $rows) {
+            foreach ($rows as $row) {
+                foreach ($mods as $mod) {
+                    $id = ($mod['entity_id'])($row);
+                    if ($id !== null) { $ids[$id] = true; }
+                }
+            }
+        }
+        $sum['videos_total'] = count($ids);
+        $sum['videos_transcribed'] = count(array_intersect_key($ids, $ctx['ids']));
+    }
+    return $sum;
 }
 
 // Summaries are cached on disk keyed by (mtime, size) so the participant list
 // never re-parses unchanged multi-MB donations. Cache lives in the instance
 // cache tree; without one (developer mode) summaries are computed each time.
-function ddp_summarize_file_cached(string $path): ?array {
+function ddp_summarize_file_cached(string $path, ?array $ctx = null): ?array {
     $cacheRoot = inst_paths()['cache'];
     $st = @stat($path);
-    if ($cacheRoot === null || $st === false) { return ddp_summarize_file($path); }
+    if ($cacheRoot === null || $st === false) { return ddp_summarize_file($path, $ctx); }
     $key = $cacheRoot . '/stats/' . basename($path) . '.stats.json';
     $cached = inst_read_json($key);
     if (is_array($cached)
         && ($cached['_mtime'] ?? -1) === $st['mtime']
         && ($cached['_size'] ?? -1) === $st['size']
+        && ($ctx === null || ($cached['_ctx_fp'] ?? null) === $ctx['fp'])
         && is_array($cached['summary'] ?? null)) {
         return $cached['summary'];
     }
-    $sum = ddp_summarize_file($path);
+    $sum = ddp_summarize_file($path, $ctx);
     if ($sum !== null) {
-        inst_write_json_atomic($key, ['_mtime' => $st['mtime'], '_size' => $st['size'], 'summary' => $sum]);
+        inst_write_json_atomic($key, ['_mtime' => $st['mtime'], '_size' => $st['size'],
+                                      '_ctx_fp' => $ctx['fp'] ?? null, 'summary' => $sum]);
     }
     return $sum;
 }
 
 /** ddp_load_dir's shape with per-table SUMMARIES instead of row data —
  *  memory stays flat no matter how many/large the donations are. */
-function ddp_load_dir_summaries(string $dir): array {
+function ddp_load_dir_summaries(string $dir, ?array $ctx = null): array {
     $participants = []; $skipped = [];
     foreach (glob(rtrim($dir, '/') . '/*.json') ?: [] as $path) {
-        $sum = ddp_summarize_file_cached($path);
+        $sum = ddp_summarize_file_cached($path, $ctx);
         if ($sum === null) {
-            $skipped[] = ['path' => basename($path), 'reason' => 'not a donation file (skipped)'];
+            $skipped[] = ddp_skip_entry($path);
             continue;
         }
         ddp_place_entry($participants, $sum['participant'], $sum['source'],
             ['file' => $sum['file'], 'key_millis' => $sum['key_millis'],
-             'superseded' => [], 'tables' => $sum['tables'], 'deleted' => $sum['deleted']]);
+             'superseded' => [], 'tables' => $sum['tables'], 'deleted' => $sum['deleted'],
+             'videos_total' => $sum['videos_total'] ?? null,
+             'videos_transcribed' => $sum['videos_transcribed'] ?? null]);
     }
     ksort($participants);
     foreach ($participants as &$p) { ksort($p['platforms']); }

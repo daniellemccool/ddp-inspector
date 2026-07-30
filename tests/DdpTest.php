@@ -71,3 +71,25 @@ eq(count($one['platforms']['tiktok']['tables']['tiktok_comments']), 2, 'targeted
 eq(ddp_load_participant($dir, 'no-such-participant'), null, 'targeted load: unknown id -> null');
 eq(ddp_load_participant($dir, '../../etc'), null, 'targeted load: unsafe id rejected');
 eq(ddp_load_participant($dir, ''), null, 'targeted load: empty id rejected');
+
+// --- transcript coverage counting (ctx) --------------------------------------
+$ctx = ['ids' => ['7654562293757250829' => true], 'fp' => 'test-fp'];
+$sumCtx = ddp_summarize_file($p1, $ctx);
+check(($sumCtx['videos_total'] ?? 0) >= 2, 'ctx: linked videos counted');
+eq($sumCtx['videos_transcribed'] ?? null, 1, 'ctx: available transcript counted');
+$sumNoCtx = ddp_summarize_file($p1);
+check(!isset($sumNoCtx['videos_total']), 'no ctx: no coverage fields');
+
+// --- non-conforming classification -------------------------------------------
+$tmpdir = sys_get_temp_dir() . '/ddp-skiptest-' . getmypid();
+exec('rm -rf ' . escapeshellarg($tmpdir)); mkdir($tmpdir);
+file_put_contents("$tmpdir/assignment=1_task=1_participant=pd_source=tiktok_key=9-tiktok.json", '{"status": "data_submission declined"}');
+file_put_contents("$tmpdir/assignment=1_task=1_participant=pe_source=tiktok_key=9-tiktok.json", '');
+file_put_contents("$tmpdir/assignment=1_task=1_participant=pi_source=tiktok_key=9-tiktok.json", '{"not": "a list"}');
+$sk = ddp_load_dir_summaries($tmpdir);
+eq(count($sk['skipped']), 3, 'classification: three non-donations skipped');
+$byKind = array_column($sk['skipped'], 'kind', 'participant');
+eq($byKind['pd'] ?? null, 'declined', 'classification: declined recognized');
+eq($byKind['pe'] ?? null, 'empty', 'classification: empty recognized');
+eq($byKind['pi'] ?? null, 'invalid', 'classification: fallback invalid');
+exec('rm -rf ' . escapeshellarg($tmpdir));
