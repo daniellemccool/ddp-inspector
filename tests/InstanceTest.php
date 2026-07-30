@@ -77,6 +77,28 @@ $probe = inst_probe();
 eq($probe['ok'], false, 'missing binary -> not ok');
 check(str_contains($probe['message'], 'unavailable'), 'missing binary -> unavailable message');
 
+// yoda probe uses the live-verified gocmd form: -c <dir with env json>, -T ticket, i: prefix
+$fakeg = "$scratch/fake-gocmd";
+$glog = "$scratch/gocmd-args.log";
+$gcopy = "$scratch/gocmd-env-copy.json";
+file_put_contents($fakeg,
+    "#!/bin/sh\nprintf '%s' \"\$*\" > " . escapeshellarg($glog) . "\n"
+    . "[ \"\$1\" = -c ] || exit 3\n"
+    . "[ -f \"\$2/irods_environment.json\" ] || exit 4\n"
+    . "cp \"\$2/irods_environment.json\" " . escapeshellarg($gcopy) . "\nexit 0\n");
+chmod($fakeg, 0755);
+$GLOBALS['__cfg']['gocmd_bin'] = $fakeg;
+$probe = inst_probe();
+eq($probe['ok'], true, 'yoda probe ok via verified invocation form');
+$gargs = (string)file_get_contents($glog);
+check(str_contains($gargs, '-T T'), 'yoda probe passes the ticket via -T');
+check(str_contains($gargs, 'ls i:/nluu10p/home/x'), 'yoda probe lists the i:-prefixed collection');
+$genv = json_decode((string)file_get_contents($gcopy), true);
+eq($genv['irods_user_name'] ?? null, 'anonymous', 'env json: anonymous user');
+eq($genv['irods_client_zone_name'] ?? null, 'nluu10p', 'env json: client zone set');
+eq($genv['irods_authentication_scheme'] ?? null, 'native', 'env json: native auth scheme');
+check(!isset($genv['irods_ticket']), 'env json carries no ticket (goes via -T)');
+
 // rd-link probe: modern endpoint fails -> legacy fallback succeeds -> source.json rewritten
 $fake = "$scratch/fake-rclone";
 file_put_contents($fake,
