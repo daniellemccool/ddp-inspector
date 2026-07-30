@@ -47,4 +47,23 @@ render 99-ddp-inspector.ini.j2 "${TMP}/99-ddp-inspector.ini"
 check "php ini: upload_max_filesize"        grep -qF 'upload_max_filesize = 64m' "${TMP}/99-ddp-inspector.ini"
 check "php ini: post_max_size"              grep -qF 'post_max_size = 64m' "${TMP}/99-ddp-inspector.ini"
 
+# ---- refresh systemd units ----
+RTPL="${PROV}/roles/refresh/templates"
+renderr() { # renderr <template> <dest>
+  "${ANSIBLE}" localhost -c local -m ansible.builtin.template \
+    -a "src=${RTPL}/$1 dest=$2 mode=0644" \
+    -e "inspector_root=/data/vol1/ddp-inspector" \
+    -e "inspector_install_dir=/opt/ddp-inspector" \
+    -e "inspector_service_user=www-data" -e "inspector_service_group=www-data" \
+    >/dev/null
+}
+renderr ddp-refresh.service.j2 "${TMP}/ddp-refresh.service"
+check "service: oneshot"                    grep -qF 'Type=oneshot' "${TMP}/ddp-refresh.service"
+check "service: runs as www-data"           grep -qF 'User=www-data' "${TMP}/ddp-refresh.service"
+check "service: exec refresh script"        grep -qF 'ExecStart=/opt/ddp-inspector/bin/ddp-refresh.sh' "${TMP}/ddp-refresh.service"
+renderr ddp-refresh.path.j2 "${TMP}/ddp-refresh.path"
+check "path: watches the request flag"      grep -qF 'PathExists=/data/vol1/ddp-inspector/state/refresh-requested' "${TMP}/ddp-refresh.path"
+renderr ddp-refresh.timer.j2 "${TMP}/ddp-refresh.timer"
+check "timer: daily"                        grep -qF 'OnCalendar=daily' "${TMP}/ddp-refresh.timer"
+
 echo; [ "${FAIL}" -eq 0 ] && echo "ALL PASS" || { echo "${FAIL} FAILURES"; exit 1; }
