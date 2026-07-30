@@ -39,10 +39,11 @@ if ($storageMode) { csrf_token(); }
     <button>Upload flow</button>
   </form>
 
-  <h2>2 · Where are your donations stored?</h2>
+  <h2>2 · About your study</h2>
   <form method="post">
     <?= csrf_field() ?><input type="hidden" name="action" value="save_source">
     <p><label>Study name <input name="study_name" value="<?= h((string)($inst['study_name'] ?? '')) ?>"></label></p>
+    <h3>Where are your donations stored?</h3>
     <p><label><input type="radio" name="source_mode" value="rd-link" <?= ($inst['source_mode'] ?? '') === 'rd-link' ? 'checked' : '' ?>>
       SURF Research Drive</label><br>
       In Research Drive: ① right-click the folder with donations and choose “Share link”,
@@ -50,12 +51,22 @@ if ($storageMode) { csrf_token(); }
       <label>Share link <input name="share_link" placeholder="https://researchdrive…/s/…"></label>
       <label>Password <input type="password" name="link_password" <?= inst_source_exists() ? 'placeholder="saved ✓"' : '' ?>></label></p>
     <p><label><input type="radio" name="source_mode" value="yoda" <?= ($inst['source_mode'] ?? '') === 'yoda' ? 'checked' : '' ?>>
-      My data manager gave me an access code</label><br>
+      Yoda</label><br>
+      Your data manager gives you a folder path and an access code — paste both here.<br>
       <label>Folder path <input name="collection" value="<?= h((string)(inst_source_load()['collection'] ?? '')) ?>"></label>
       <label>Access code <input type="password" name="access_code" <?= inst_source_exists() ? 'placeholder="saved ✓"' : '' ?>></label></p>
     <p><label><input type="radio" name="source_mode" value="local" <?= ($inst['source_mode'] ?? '') === 'local' ? 'checked' : '' ?>>
-      Advanced: a folder on this workspace</label><br>
-      <label>Folder <input name="local_path" value="<?= h((string)($inst['local_path'] ?? '')) ?>"></label></p>
+      A folder on this workspace</label><br>
+      <?php $localCandidates = inst_local_folder_candidates(); ?>
+      <?php if ($localCandidates !== []): ?>
+        Folders with donation files found on this workspace — click the field to pick one.<br>
+      <?php endif; ?>
+      <label>Folder <input name="local_path" list="local-folders" value="<?= h((string)($inst['local_path'] ?? '')) ?>"></label>
+      <?php if ($localCandidates !== []): ?>
+        <datalist id="local-folders">
+          <?php foreach ($localCandidates as $c): ?><option value="<?= h($c) ?>"></option><?php endforeach; ?>
+        </datalist>
+      <?php endif; ?></p>
     <p><label><input type="checkbox" name="cadence" value="daily" <?= ($inst['cadence'] ?? '') === 'daily' ? 'checked' : '' ?>>
       Check for new donations automatically every day</label></p>
     <button>Save</button>
