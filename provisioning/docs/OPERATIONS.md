@@ -127,7 +127,8 @@ failure is always safe.
    favorites 5,384 / likes 2,973 / shares 55 / comments 30.
 4. Record a validation log from day one.
 
-Live-validation items the hermetic tests CANNOT cover (check on the
-sandbox): `gocmd sync -T` against a real ticketed collection (ls/get are
-verified 2026-07-13; sync+ticket is exercised live here), SRC-Nginx on
-Ubuntu 24.04, and the php-fpm socket path on the deployed image.
+Live-validation results (2026-07-30, sandbox): `gocmd sync` REJECTS `-T`
+("unknown shorthand flag") in v0.12.2 — only `ls`/`get` accept tickets, so
+the refresh script pulls with `get -f` everywhere (re-download, not delta
+sync). SRC-Nginx on Ubuntu 24.04 and the php8.3-fpm socket path are
+verified live on the deployed image.

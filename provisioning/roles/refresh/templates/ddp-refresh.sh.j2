@@ -100,14 +100,18 @@ EOF
       || die "Could not reach the donation data. The access code may have expired or been revoked — ask your data manager for a new one, paste it in Setup, and try again."
     write_status pulling - - "Fetching donations…"
     ensure_real_inbox_dir
-    "${GOCMD}" sync -c "${GDIR}" -T "${TICKET}" "i:${COLLECTION}/inbox" "${ROOT}/data" \
+    # get -f, not sync: gocmd v0.12.2's sync subcommand rejects -T
+    # ("unknown shorthand flag") — only ls/get accept tickets (live finding
+    # 2026-07-30, matching the 2026-07-13 ls/get verification). get -f
+    # re-downloads instead of delta-syncing; acceptable at donation scale.
+    "${GOCMD}" get -c "${GDIR}" -T "${TICKET}" -f "i:${COLLECTION}/inbox" "${ROOT}/data" \
       || die "Fetching donations stopped partway. This is usually temporary — try again in a few minutes."
     # Transcripts: prefer a server-side extracted tree if it ever appears
     # (FSW-unblock optimization); otherwise pull shard tars and extract
     # locally (the required path while server-side extraction is blocked).
     if "${GOCMD}" ls -c "${GDIR}" -T "${TICKET}" "i:${COLLECTION}/transcripts" >/dev/null 2>&1; then
       write_status pulling - - "Fetching transcripts…"
-      "${GOCMD}" sync -c "${GDIR}" -T "${TICKET}" "i:${COLLECTION}/transcripts" "${ROOT}/data/analyses" \
+      "${GOCMD}" get -c "${GDIR}" -T "${TICKET}" -f "i:${COLLECTION}/transcripts" "${ROOT}/data/analyses" \
         || die "Fetching transcripts stopped partway. Try again in a few minutes."
     elif "${GOCMD}" ls -c "${GDIR}" -T "${TICKET}" "i:${COLLECTION}/transcripts-tars" >/dev/null 2>&1; then
       write_status pulling - - "Fetching transcript bundles…"

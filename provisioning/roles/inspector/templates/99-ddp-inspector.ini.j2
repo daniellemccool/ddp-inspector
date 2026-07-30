@@ -3,3 +3,9 @@
 ; client_max_body_size in the inspector location block.
 upload_max_filesize = {{ inspector_upload_max }}
 post_max_size = {{ inspector_upload_max }}
+; Real donations run to tens of MB each; decoding one can transiently need
+; ~10x the file size (live finding 2026-07-30: 24MB donation vs 128M default
+; ceiling = 500 on the participant list). Pages parse at most one file at a
+; time, so this bounds the single-file spike, not the inbox size.
+memory_limit = 512M
+max_execution_time = 120

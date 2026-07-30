@@ -3,7 +3,7 @@ require_once __DIR__ . '/../src/bootstrap.php';
 if (!cfg_ready()) { http_response_code(500); echo 'Configuration missing. Copy config.php.example to config.php.'; return; }
 if (!guard_configured()) { return; }
 
-$loaded = ddp_load_dir((string)inst_effective_ddp_dir());
+$loaded = ddp_load_dir_summaries((string)inst_effective_ddp_dir());
 $status = inst_status();
 $storageMode = inst_root() !== null;
 // The form below calls csrf_field() well after HTML output has started; force the
@@ -42,7 +42,7 @@ if ($storageMode) { csrf_token(); }
     <?php foreach ($loaded['participants'] as $p):
         $total = 0; $earliest = null; $latest = null; $plats = [];
         foreach ($p['platforms'] as $slug => $entry) {
-            $scope = stats_platform_scope($entry['tables'], []);
+            $scope = stats_scope_from_summaries($entry['tables']);
             $plats[] = $slug;
             $total += $scope['total_rows'];
             if ($scope['earliest'] !== null && ($earliest === null || $scope['earliest'] < $earliest)) { $earliest = $scope['earliest']; }
