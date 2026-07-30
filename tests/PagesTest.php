@@ -42,6 +42,9 @@ check(str_contains($ok, '0.42') || str_contains($ok, 'low'), 'low-confidence seg
 check(str_contains($ok, '<td>Hello world</td>'), 'segment text derived from tokens, marker tokens skipped');
 check(str_contains($ok, '<td>this is a test</td>'), 'derived segment text trimmed of leading token space');
 check(str_contains($ok, 'Fixture video about testing'), 'video metadata: description rendered');
+check(str_contains($ok, 'it&#039;s great'), 'caption apostrophe survives as one entity');
+check(!str_contains($ok, '<span class="tag">#039'), 'hashtag muting must not match inside h() entities');
+check(str_contains($ok, '<span class="tag">#test</span>'), 'real hashtags still muted');
 check(str_contains($ok, '@fixtureuser'), 'video metadata: uploader rendered');
 check(str_contains($ok, 'posted 19 Apr 2026, 10:28'), 'video metadata: pretty date');
 check(str_contains($ok, '11.4M views') && str_contains($ok, '1.1M likes') && str_contains($ok, '3,181 comments'),

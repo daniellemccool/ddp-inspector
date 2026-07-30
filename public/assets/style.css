@@ -1,25 +1,134 @@
-:root { --ink:#1a1a1a; --paper:#f9f9f7; --rule:#d8d8d2; --accent:#8a1a1a; --low:#d03b3b; }
-body { font-family: Georgia,'Charter',serif; background:var(--paper); color:var(--ink); margin:0; line-height:1.45; }
-.wrap { max-width:60rem; margin:0 auto; padding:1.5rem; }
-h1 { font-size:1.5rem; } h2 { font-size:1.1rem; margin-top:1.6rem; } h3 { font-size:1rem; }
-a { color:var(--accent); }
-table { border-collapse:collapse; width:100%; margin:.5rem 0 1rem; }
-th,td { text-align:left; padding:.25rem .5rem; border-bottom:1px solid var(--rule); vertical-align:top; }
-th { font-size:.8rem; text-transform:uppercase; letter-spacing:.03em; color:#666; }
+/* DDP Inspector — one quiet, journal-like system for all four pages.
+   The register contrast carries the design: donated content reads in serif;
+   interface chrome (labels, table headers, notes, controls) is small sans. */
+
+:root {
+  --ink:#1f1e1a; --ink-soft:#4c4a42; --mute:#7a786d;
+  --paper:#f7f6f1; --card:#fefdfa; --rule:#dcd9cc; --rule-soft:#e9e7db;
+  --accent:#8a1a1a; --accent-wash:#f6ecea;
+  --amber-wash:#faf3e0; --amber-line:#e2d2a3;
+  --low:#b32222; --low-wash:#f7e8e6;
+  --serif:Georgia,'Charter','Iowan Old Style',serif;
+  --sans:system-ui,'Segoe UI','Helvetica Neue',Arial,sans-serif;
+  --mono:ui-monospace,'Cascadia Code',Menlo,Consolas,'DejaVu Sans Mono',monospace;
+}
+
+* { box-sizing:border-box; }
+body { margin:0; background:var(--paper); color:var(--ink); font:1rem/1.55 var(--serif); }
+.wrap { max-width:62rem; margin:0 auto; padding:1.1rem 2rem 4rem; }
+
+/* --- masthead ------------------------------------------------------- */
+.site { display:flex; justify-content:space-between; align-items:baseline; gap:1rem;
+        padding:.45rem 0 .55rem; margin-bottom:1.9rem; border-bottom:1px solid var(--rule);
+        font-family:var(--sans); font-size:.8rem; }
+.wordmark { font-family:var(--serif); font-size:.92rem; font-weight:700; letter-spacing:.12em;
+            text-transform:uppercase; color:var(--ink); text-decoration:none; }
+.wordmark:hover { color:var(--accent); }
+.crumbs { display:flex; gap:1rem; }
+
+/* --- type scale ------------------------------------------------------ */
+h1 { font-size:1.55rem; line-height:1.25; font-weight:700; margin:0 0 .55rem; }
+h2 { font-size:1.18rem; margin:2.3rem 0 .4rem; }
+h3 { font-size:1.02rem; margin:1.9rem 0 .3rem; }
+.id { font-family:var(--mono); font-size:.78em; font-weight:400; color:var(--ink-soft); }
+
+a { color:var(--accent); text-decoration-thickness:1px; text-underline-offset:2px;
+    text-decoration-color:#cfa8a3; }
+a:hover { text-decoration-color:var(--accent); }
+:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+
+.eyebrow { font:600 .68rem/1.4 var(--sans); text-transform:uppercase; letter-spacing:.14em;
+           color:var(--mute); margin:1.7rem 0 .35rem; }
+.meta { font-family:var(--sans); font-size:.8rem; color:var(--mute); }
+p.meta { margin:.35rem 0; }
+
+/* --- tables ----------------------------------------------------------- */
+table { border-collapse:collapse; width:100%; margin:.55rem 0 1.6rem; font-size:.95rem; }
+th { font:600 .69rem/1.4 var(--sans); text-transform:uppercase; letter-spacing:.08em;
+     color:var(--mute); text-align:left; padding:.3rem .6rem; border-bottom:2px solid var(--rule); }
+td { text-align:left; padding:.42rem .6rem; border-bottom:1px solid var(--rule-soft); vertical-align:top; }
+tbody tr:last-child td { border-bottom-color:var(--rule); }
+tbody tr:hover td { background:#efede2; }
 .num { text-align:right; font-variant-numeric:tabular-nums; }
-.date,.vid,.transcript,pre { font-family:'DejaVu Sans Mono',monospace; font-size:.85rem; }
-.count { color:#666; font-weight:normal; font-size:.85rem; }
-.reshuffle { font-size:.8rem; margin-left:.5rem; }
-.skipped,.notice { background:#fff6e6; border:1px solid #e5cf9a; padding:.5rem .75rem; border-radius:4px; }
-.low { color:var(--low); font-weight:bold; }
-.transcript { white-space:pre-wrap; background:#fff; border:1px solid var(--rule); padding:.75rem; }
-details summary { cursor:pointer; color:#666; }
-.videometa { background:#fff; border:1px solid var(--rule); border-radius:4px; padding:.75rem 1rem; margin:.75rem 0 1rem; }
-.videometa .desc { margin:.1rem 0 .4rem; font-size:1.05rem; }
-.videometa .byline { margin:.2rem 0; color:#555; }
-.videometa .vstats { margin:.2rem 0; font-variant-numeric:tabular-nums; }
-.videometa .meta { margin:.3rem 0 .1rem; font-size:.85rem; color:#666; }
-.eyebrow { font-size:.7rem; text-transform:uppercase; letter-spacing:.08em; color:#888; margin:1rem 0 .25rem; }
-.videometa .eyebrow { margin:.1rem 0 .2rem; }
-.desc .tag { color:#999; }
-.transcript-block { margin:0 0 1rem; padding:.9rem 1.1rem; background:#fff; border:1px solid var(--rule); border-left:3px solid var(--accent); font-size:1.02rem; line-height:1.65; white-space:pre-wrap; }
+.of { color:var(--mute); font-size:.85em; }
+.date { font-family:var(--mono); font-size:.78rem; color:var(--ink-soft); white-space:nowrap; }
+.url { font-family:var(--mono); font-size:.78rem; color:var(--ink-soft); overflow-wrap:anywhere; }
+.rows td { overflow-wrap:anywhere; }
+.actions { font-family:var(--sans); font-size:.8rem; white-space:nowrap; }
+
+/* --- section furniture (participant page) ----------------------------- */
+.count { font:400 .78rem var(--sans); color:var(--mute); margin-left:.4rem; }
+.reshuffle { font:400 .78rem var(--sans); margin-left:.6rem; }
+.samplesize { font-family:var(--sans); font-size:.8rem; color:var(--mute); margin:.25rem 0 .3rem; }
+.samplesize a { display:inline-block; padding:.12rem .6rem; margin-left:-1px;
+                border:1px solid var(--rule); background:var(--card);
+                text-decoration:none; color:var(--accent); }
+.samplesize a:first-of-type { border-radius:4px 0 0 4px; }
+.samplesize a:last-of-type { border-radius:0 4px 4px 0; }
+.samplesize a.cur { background:var(--accent); border-color:var(--accent); color:#fff; }
+
+/* --- notes & folds ----------------------------------------------------- */
+.notice { font-family:var(--sans); font-size:.85rem; color:var(--ink-soft);
+          background:var(--card); border:1px solid var(--rule); border-radius:5px;
+          padding:.55rem .85rem; }
+.skipped { font-family:var(--sans); font-size:.85rem; color:var(--ink-soft);
+           background:var(--amber-wash); border:1px solid var(--amber-line); border-radius:5px;
+           padding:.55rem .85rem; }
+details.skipped ul { margin:.5rem 0 .2rem; padding-left:1.3rem; }
+details summary { cursor:pointer; font-family:var(--sans); font-size:.82rem; color:var(--mute); }
+details summary:hover { color:var(--accent); }
+details.skipped summary { color:inherit; }
+pre { font-family:var(--mono); font-size:.75rem; line-height:1.5; background:var(--card);
+      border:1px solid var(--rule); border-radius:6px; padding:.7rem 1rem;
+      overflow:auto; max-height:70vh; }
+details.raw { margin-top:2.4rem; }
+
+/* --- transcript page --------------------------------------------------- */
+.videometa { max-width:46em; background:var(--card); border:1px solid var(--rule);
+             border-radius:8px; padding:.85rem 1.15rem .95rem; margin:1.3rem 0 0; }
+.videometa .eyebrow { margin:0 0 .3rem; }
+.videometa .desc { font-size:1.08rem; line-height:1.5; margin:0 0 .55rem; }
+.desc .tag { color:var(--mute); }
+.byline, .vstats { font-family:var(--sans); font-size:.82rem; color:var(--ink-soft);
+                   font-variant-numeric:tabular-nums; margin:.16rem 0; }
+.byline .handle { font-weight:600; color:var(--ink); }
+.videometa .meta { margin:.5rem 0 0; }
+
+.transcript-block { max-width:43em; margin:.3rem 0 2.4rem; padding:.1rem 0 .1rem 1.2rem;
+                    border-left:3px solid var(--accent); font-size:1.06rem; line-height:1.75;
+                    white-space:pre-wrap; }
+.segments { font-family:var(--sans); font-size:.85rem; max-width:46em; }
+.segments th { white-space:nowrap; }
+.segments td:first-child { font-family:var(--mono); font-size:.78rem; }
+.low, td.low { color:var(--low); font-weight:700; }
+td.low { background:var(--low-wash); }
+
+/* --- forms (setup page, refresh button) -------------------------------- */
+button { font:600 .82rem var(--sans); color:var(--accent); background:var(--card);
+         border:1px solid #c9b3ab; border-radius:6px; padding:.45rem .95rem; cursor:pointer; }
+button:hover { border-color:var(--accent); background:var(--accent-wash); }
+.step { margin:2.1rem 0; }
+.choice { background:var(--card); border:1px solid var(--rule); border-radius:8px;
+          padding:.7rem 1rem .8rem; margin:.6rem 0; }
+.choice:has(input[type=radio]:checked) { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent); }
+.choice-head { display:flex; gap:.55rem; align-items:baseline; cursor:pointer;
+               font-family:var(--sans); font-size:.92rem; font-weight:600; }
+.choice-body { margin:.35rem 0 0 1.55rem; font-family:var(--sans); font-size:.83rem;
+               color:var(--ink-soft); }
+.field { display:block; font-family:var(--sans); font-size:.78rem; color:var(--ink-soft);
+         margin:.6rem 0; }
+.field input { display:block; width:100%; max-width:26rem; margin-top:.22rem; padding:.42rem .6rem;
+               font:400 .9rem var(--sans); color:var(--ink); background:#fff;
+               border:1px solid var(--rule); border-radius:5px; }
+.field input:focus { border-color:var(--accent); }
+.toolbar { display:flex; align-items:center; gap:1rem; margin:.5rem 0 .9rem; flex-wrap:wrap; }
+.toolbar form { margin:0; }
+input[type=radio], input[type=checkbox] { accent-color:var(--accent); }
+
+/* --- print: it's a reading tool ---------------------------------------- */
+@media print {
+  body { background:#fff; }
+  .site, .crumbs, form, .samplesize, .reshuffle, details, button { display:none !important; }
+  .videometa, .notice, .skipped { border-color:#999; }
+}
+@media (max-width:44rem) { .wrap { padding:0.75rem 1rem 3rem; } }

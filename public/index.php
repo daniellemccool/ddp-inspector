@@ -39,21 +39,31 @@ if ($storageMode) { csrf_token(); }
 ?>
 <!doctype html>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>DDP Inspector — participants</title>
 <link rel="stylesheet" href="<?= h(url('assets/style.css')) ?>">
 <main class="wrap">
-  <h1>DDP Inspector</h1>
+  <header class="site">
+    <a class="wordmark" href="<?= h(url('index.php')) ?>">DDP Inspector</a>
+    <?php if ($storageMode): ?>
+      <nav class="crumbs"><a href="<?= h(url('setup.php')) ?>">Settings</a></nav>
+    <?php endif; ?>
+  </header>
+  <h1>Participants</h1>
   <?php if ($storageMode): ?>
-    <p class="meta">
-      <?php if (!empty($status['finished_at'])): ?>Last updated <?= h((string)$status['finished_at']) ?> ·<?php endif; ?>
-      <?= inst_donation_count() ?> donation file(s)
-      <?php if ($status['phase'] === 'error'): ?><span class="skipped"><?= h((string)$status['message']) ?></span><?php endif; ?>
-    </p>
-    <form method="post" action="<?= h(url('setup.php')) ?>">
-      <?= csrf_field() ?><input type="hidden" name="action" value="refresh_now">
-      <button>Check for new donations</button>
-    </form>
-    <p class="meta"><a href="<?= h(url('setup.php')) ?>">Settings</a></p>
+    <div class="toolbar">
+      <p class="meta">
+        <?php if (!empty($status['finished_at'])): ?>Last updated <?= h((string)$status['finished_at']) ?> ·<?php endif; ?>
+        <?= inst_donation_count() ?> donation file(s)
+      </p>
+      <form method="post" action="<?= h(url('setup.php')) ?>">
+        <?= csrf_field() ?><input type="hidden" name="action" value="refresh_now">
+        <button>Check for new donations</button>
+      </form>
+    </div>
+    <?php if ($status['phase'] === 'error'): ?>
+      <p class="skipped"><?= h((string)$status['message']) ?></p>
+    <?php endif; ?>
   <?php endif; ?>
   <?php if ($loaded['skipped']): ?>
     <details class="skipped">
@@ -91,14 +101,14 @@ if ($storageMode) { csrf_token(); }
             if ($scope['latest'] !== null && ($latest === null || $scope['latest'] > $latest)) { $latest = $scope['latest']; }
         } ?>
       <tr>
-        <td><a href="<?= h(url('participant.php?id=' . rawurlencode($p['id']))) ?>"><?= h($p['id']) ?></a></td>
+        <td><a class="id" href="<?= h(url('participant.php?id=' . rawurlencode($p['id']))) ?>"><?= h($p['id']) ?></a></td>
         <td><?= h(implode(', ', $plats)) ?></td>
         <td class="num"><?= number_format($total) ?></td>
         <td class="num"><?= $p['videos_total'] > 0
-            ? number_format($p['videos_transcribed']) . ' of ' . number_format($p['videos_total'])
+            ? number_format($p['videos_transcribed']) . ' <span class="of">of ' . number_format($p['videos_total']) . '</span>'
             : '—' ?></td>
-        <td><?= h(fmt_ts($earliest)) ?></td>
-        <td><?= h(fmt_ts($latest)) ?></td>
+        <td class="date"><?= h(fmt_ts($earliest)) ?></td>
+        <td class="date"><?= h(fmt_ts($latest)) ?></td>
       </tr>
     <?php endforeach; ?>
     </tbody>
