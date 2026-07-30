@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <!-- DDP Inspector icon. d3i brand palette:
+       blue #4272EF (primary), red #FF5E5E (secondary), yellow #FFCF60 (tertiary).
+       Eye (viewer) over donation-data lines; bar order matches the DDP
+       Transcribe icon. Full-bleed square: the SRC portal imposes a circle
+       crop, so all glyphs sit inside the inscribed circle. Reads at 32-42px. -->
+  <rect x="0" y="0" width="256" height="256" fill="#4272EF"/>
+  <path d="M56 88 Q128 32 200 88 Q128 144 56 88 Z" fill="#FFFFFF"/>
+  <circle cx="128" cy="86" r="22" fill="#4272EF"/>
+  <rect x="68" y="152" width="120" height="18" rx="9" fill="#FFCF60"/>
+  <rect x="68" y="180" width="92"  height="18" rx="9" fill="#FF5E5E"/>
+  <rect x="68" y="208" width="64"  height="18" rx="9" fill="#FFFFFF" opacity="0.9"/>
+</svg>

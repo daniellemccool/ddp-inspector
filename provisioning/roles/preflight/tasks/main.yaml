@@ -19,9 +19,10 @@
     fail_msg: >-
       {{ nginx_confdir | default('/etc/nginx/app-location-conf.d') }} is
       missing — the SRC-Nginx component ("Web Apps via Nginx") has not run on
-      this workspace. Add SRC-Nginx to the catalog item BEFORE ddp-inspector
-      (order: SRC-OS, SRC-CO, SRC-External plugin, SRC-Nginx, ddp-inspector)
-      and relaunch.
+      this workspace. External components ALL execute at the SRC-External
+      plugin's slot, so SRC-Nginx must be listed BEFORE SRC-External plugin
+      (order: SRC-OS, SRC-CO, SRC-Nginx, SRC-External plugin, then
+      ddp-inspector among the externals). Fix the item order and relaunch.
 
 - name: Check php availability (version floor 8.1; Ubuntu 24.04 ships 8.3)
   ansible.builtin.command: apt-cache policy php-fpm
@@ -68,6 +69,20 @@
   when: >-
     (storage_path | default('') | length == 0)
     or ('<' in storage_path | default(''))
+
+# At provision time the play runs as the cloud image user (ubuntu) and NO
+# home data-dir symlink exists yet — SRAM users and their ~/data links appear
+# later (verified live 2026-07-30: auto-detect via /home/ubuntu/data failed on
+# a launch whose volume WAS attached). SRC mounts external volumes under
+# /data/<volume-name>, so the mount table is the provision-time source of
+# truth; the home-dir scan below stays as a fallback for shared-mount shapes.
+- name: Detect volumes mounted under the platform data root (provision-time path)
+  ansible.builtin.set_fact:
+    storage_candidates: >-
+      {{ storage_mount_targets
+         | select('match', '^' ~ (storage_platform_data_root | default('/data')) ~ '/.')
+         | list }}
+  when: storage_mount_targets is defined
 
 - name: Inspect the data dir itself (it may be a symlink to a shared mount root)
   ansible.builtin.stat:
@@ -116,6 +131,12 @@
        and item.stat.lnk_source | default('') in storage_mount_targets)
       or (item.stat.isdir | default(false)
           and item.stat.path in storage_mount_targets)
+    # Same volume may already be listed via the mount-table scan (directly,
+    # or as the symlink's target) — never double-count it as ambiguity.
+    - item.stat.path not in storage_candidates
+    - >-
+      not (item.stat.islnk | default(false)
+           and item.stat.lnk_source | default('') in storage_candidates)
 
 - name: Fail on ambiguous storage volume auto-detection
   ansible.builtin.fail:
@@ -144,9 +165,10 @@
     that:
       - storage_root | length > 0
     fail_msg: >-
-      ddp-inspector needs a storage volume: none was auto-detected under
-      {{ storage_data_root_real | default(preflight_data_root) }} and no
-      usable storage_path was supplied (a value containing '<' is treated as
+      ddp-inspector needs a storage volume: no ext4/xfs volume is mounted
+      under {{ storage_platform_data_root | default('/data') }}, none was
+      found under {{ storage_data_root_real | default(preflight_data_root) }},
+      and no usable storage_path was supplied (a value containing '<' is treated as
       an unedited placeholder, i.e. unset; fuse mounts such as
       Research-Drive-by-Link never qualify). Create a small volume in this
       CO and attach it at launch — donation-only studies need only a small

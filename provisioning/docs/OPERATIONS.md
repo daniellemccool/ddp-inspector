@@ -29,10 +29,15 @@ Researchers never need any of it: their surface is the web UI. Snag numbers
 
 Component order in ANY item that includes the inspector:
 
-    SRC-OS → SRC-CO → SRC-External plugin → SRC-Nginx → ddp-inspector
+    SRC-OS → SRC-CO → SRC-Nginx → SRC-External plugin → (externals: … → ddp-inspector)
 
-- SRC-External must precede any non-SURF component; SRC-Nginx must precede
-  the inspector (preflight fails otherwise, naming the fix).
+- External (non-SURF) components ALL execute at the SRC-External plugin's
+  slot, in their item order among themselves — a component's own list
+  position does NOT delay it past later SURF components (verified live
+  2026-07-30: an item listing SRC-Nginx after SRC-External never ran nginx
+  before the inspector, and preflight aborted the launch). So SRC-Nginx
+  must be LISTED before SRC-External plugin; ddp-inspector goes last among
+  the externals (preflight fails otherwise, naming the fix).
 - "Research Drive by Link" is OPTIONAL and not the researcher path (D9);
   add it only when an operator prefers a provision-time mount, and use the
   app's "folder on this workspace" mode pointed at `/data/<mountdir>`.
@@ -48,7 +53,11 @@ Component order in ANY item that includes the inspector:
     editing the item and launching fresh.
 - Firewall: item defaults (22/80/443) suffice; everything the inspector
   runs binds localhost. 3389 open with nothing listening is S15 — leave it.
-- Access button: Webinterface (https:).
+- Access button: declare a component-level access format — label
+  `DDP Inspector`, format `https://==REVERSE_PROXY==/inspector/` — so the
+  workspace card deep-links into the app (the domain root serves 403; no
+  root location exists). Static text: if an item overrides
+  `inspector_base_path`, update the format to match.
 
 ## 3. Volumes
 
@@ -64,6 +73,11 @@ growability first):
 Two volumes attached (e.g. a team's analyses drive alongside ours) → set
 `storage_path` explicitly at launch (S10); auto-detect refuses to guess.
 fuse mounts (RD-by-Link) never qualify as the storage volume.
+
+Auto-detect reads the MOUNT TABLE under `/data/` (where SRC mounts external
+volumes) — necessary because provisioning runs as the cloud user before any
+SRAM user's `~/data` symlink exists (live finding 2026-07-30); the home
+data-dir scan remains as a fallback for shared-mount shapes.
 
 ## 4. Yoda read tickets (the "access code")
 
