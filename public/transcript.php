@@ -65,7 +65,8 @@ $seg_info = function (array $seg): array {
     <?php if ($vm !== [] || $srcOk || $lang !== null): ?>
       <section class="videometa">
         <?php if (($vm['video_description'] ?? '') !== ''): ?>
-          <p class="desc"><?= h((string)$vm['video_description']) ?></p>
+          <p class="eyebrow">video caption</p>
+          <p class="desc"><?= preg_replace('/(#\w+)/u', '<span class="tag">$1</span>', h((string)$vm['video_description'])) ?></p>
         <?php endif; ?>
         <?php if ($byline !== []): ?><p class="byline"><?= h(implode(' · ', $byline)) ?></p><?php endif; ?>
         <?php if ($stats !== []): ?><p class="vstats"><?= implode(' · ', $stats) ?></p><?php endif; ?>
@@ -80,7 +81,11 @@ $seg_info = function (array $seg): array {
       </section>
     <?php endif; ?>
     <?php if ($txt !== null): ?>
-      <pre class="transcript"><?= h((string)$txt) ?></pre>
+      <?php $dur = is_numeric($meta['duration_s'] ?? null)
+          ? sprintf('%d:%02d', intdiv((int)round((float)$meta['duration_s']), 60), (int)round((float)$meta['duration_s']) % 60)
+          : null; ?>
+      <p class="eyebrow">spoken transcript<?= $dur !== null ? ' · ' . h($dur) : '' ?></p>
+      <blockquote class="transcript-block"><?= h((string)$txt) ?></blockquote>
     <?php else: ?>
       <p class="notice">(transcript text file missing)</p>
     <?php endif; ?>

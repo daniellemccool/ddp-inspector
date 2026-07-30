@@ -19,3 +19,7 @@ details summary { cursor:pointer; color:#666; }
 .videometa .byline { margin:.2rem 0; color:#555; }
 .videometa .vstats { margin:.2rem 0; font-variant-numeric:tabular-nums; }
 .videometa .meta { margin:.3rem 0 .1rem; font-size:.85rem; color:#666; }
+.eyebrow { font-size:.7rem; text-transform:uppercase; letter-spacing:.08em; color:#888; margin:1rem 0 .25rem; }
+.videometa .eyebrow { margin:.1rem 0 .2rem; }
+.desc .tag { color:#999; }
+.transcript-block { margin:0 0 1rem; padding:.9rem 1.1rem; background:#fff; border:1px solid var(--rule); border-left:3px solid var(--accent); font-size:1.02rem; line-height:1.65; white-space:pre-wrap; }
