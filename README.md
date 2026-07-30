@@ -41,6 +41,9 @@ php tests/run.php
 ## Deploy (SURF Research Cloud, behind nginx + SRAM)
 See `deploy/PROVISION.md`.
 
+Provisioning for SURF Research Cloud lives in `provisioning/` (the repo is
+also the SRC catalog component — see `provisioning/README.md`).
+
 ## Notes
 - Reads raw DDP JSON files directly (not the pipeline's state DB).
 - TikTok comments are shown standalone — the export carries no comment↔video link.

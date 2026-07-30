@@ -1,0 +1,208 @@
+---
+# Fail fast, operator-facing, before any apt churn. Provisioning is entirely
+# operator territory (spec §2): with no study parameters, nothing a
+# researcher does can make this play fail — technical fail_msgs are correct
+# here. Researcher-facing errors live in the refresh script's status file.
+
+# --- Environment asserts ----------------------------------------------------
+
+- name: Check the SRC-Nginx app-location conf dir exists
+  ansible.builtin.stat:
+    path: "{{ nginx_confdir | default('/etc/nginx/app-location-conf.d') }}"
+  register: preflight_nginx_dir
+
+- name: Fail clearly when SRC-Nginx has not run on this workspace
+  ansible.builtin.assert:
+    that:
+      - preflight_nginx_dir.stat.exists
+      - preflight_nginx_dir.stat.isdir | default(false)
+    fail_msg: >-
+      {{ nginx_confdir | default('/etc/nginx/app-location-conf.d') }} is
+      missing — the SRC-Nginx component ("Web Apps via Nginx") has not run on
+      this workspace. Add SRC-Nginx to the catalog item BEFORE ddp-inspector
+      (order: SRC-OS, SRC-CO, SRC-External plugin, SRC-Nginx, ddp-inspector)
+      and relaunch.
+
+- name: Check php availability (version floor 8.1; Ubuntu 24.04 ships 8.3)
+  ansible.builtin.command: apt-cache policy php-fpm
+  register: preflight_php_policy
+  changed_when: false
+  when: not (preflight_skip_php | default(false) | bool)
+
+- name: Fail clearly when php-fpm is not installable
+  ansible.builtin.assert:
+    that:
+      - "'Candidate:' in preflight_php_policy.stdout"
+      - "'Candidate: (none)' not in preflight_php_policy.stdout"
+    fail_msg: >-
+      php-fpm is not installable from apt on this image. The ddp-inspector
+      component targets stock Ubuntu 24.04 (PHP 8.3); check the OS image the
+      item uses.
+  when: not (preflight_skip_php | default(false) | bool)
+
+# --- Storage volume resolution -----------------------------------------------
+# Ported from researchcloud-ddp-transcribe preflight, with one addition: only
+# BLOCK-DEVICE filesystems (ext4/xfs) qualify as storage volumes. fuse.*
+# mounts — e.g. the Research-Drive-by-Link rclone mount under /data — must
+# never be adopted as the durable tier. SRC passes parameters as extra-vars,
+# which set_fact cannot override, so the raw storage_path INPUT is resolved
+# into the storage_root FACT every consumer uses. An unedited portal
+# placeholder (contains '<') counts as unset. storage_mounts_source /
+# storage_data_root / nginx_confdir are testability seams.
+
+- name: Resolve the data root default (home of the launching user)
+  ansible.builtin.set_fact:
+    preflight_data_root: >-
+      {{ storage_data_root
+         | default((ansible_env.SUDO_USER is defined and ansible_env.SUDO_USER | length > 0)
+                   | ternary('/home/' ~ ansible_env.SUDO_USER | default('') ~ '/data',
+                             ansible_env.HOME | default('/root') ~ '/data')) }}
+
+- name: Record qualifying mounted filesystem targets (block-device only)
+  ansible.builtin.set_fact:
+    storage_mount_targets: >-
+      {{ (storage_mounts_source | default(ansible_mounts))
+         | selectattr('fstype', 'in', ['ext4', 'xfs'])
+         | map(attribute='mount') | list }}
+    storage_candidates: []
+  when: >-
+    (storage_path | default('') | length == 0)
+    or ('<' in storage_path | default(''))
+
+- name: Inspect the data dir itself (it may be a symlink to a shared mount root)
+  ansible.builtin.stat:
+    path: "{{ preflight_data_root }}"
+    follow: false
+  register: storage_data_root_stat
+  when: storage_mount_targets is defined
+
+- name: Resolve the real data root (follow a symlinked ~/data)
+  ansible.builtin.set_fact:
+    storage_data_root_real: >-
+      {{ storage_data_root_stat.stat.lnk_source
+         if (storage_data_root_stat.stat.islnk | default(false))
+         else preflight_data_root }}
+  when: storage_mount_targets is defined
+
+- name: List entries under the data dir (volumes may be symlinks to a shared mount)
+  ansible.builtin.find:
+    paths: "{{ storage_data_root_real }}"
+    file_type: any
+    recurse: false
+  register: storage_data_entries
+  when: storage_mount_targets is defined
+
+- name: Inspect data-dir entries (symlink targets vs the mount table)
+  ansible.builtin.stat:
+    path: "{{ item.path }}"
+    follow: false
+  loop: "{{ storage_data_entries.files | default([]) }}"
+  loop_control:
+    label: "{{ item.path }}"
+  register: storage_entry_stats
+  when: storage_mount_targets is defined
+
+- name: Detect attached storage volumes (entry or its symlink target is a qualifying mount)
+  ansible.builtin.set_fact:
+    storage_candidates: "{{ storage_candidates + [item.stat.path] }}"
+  loop: "{{ storage_entry_stats.results | default([]) }}"
+  loop_control:
+    label: "{{ item.stat.path | default('(skipped)') }}"
+  when:
+    - storage_mount_targets is defined
+    - item.stat is defined
+    - >-
+      (item.stat.islnk | default(false)
+       and item.stat.lnk_source | default('') in storage_mount_targets)
+      or (item.stat.isdir | default(false)
+          and item.stat.path in storage_mount_targets)
+
+- name: Fail on ambiguous storage volume auto-detection
+  ansible.builtin.fail:
+    msg: >-
+      Multiple storage volumes are mounted under
+      {{ storage_data_root_real | default(preflight_data_root) }}
+      ({{ storage_candidates | join(', ') }}) — set storage_path explicitly
+      to the one the inspector should use (or detach the others). If one of
+      them is another workload's volume (e.g. the ddp-transcribe pipeline),
+      pointing storage_path at it is fine: the inspector namespaces
+      everything under <volume>/ddp-inspector/.
+  when:
+    - storage_candidates is defined
+    - storage_candidates | length > 1
+
+- name: Resolve storage_root (explicit storage_path, else the detected volume)
+  ansible.builtin.set_fact:
+    storage_root: >-
+      {{ storage_path
+         if (storage_path | default('') | length > 0
+             and '<' not in storage_path)
+         else (storage_candidates | default([]) | first | default('')) }}
+
+- name: Require a storage volume (no boot-disk fallback, ever)
+  ansible.builtin.assert:
+    that:
+      - storage_root | length > 0
+    fail_msg: >-
+      ddp-inspector needs a storage volume: none was auto-detected under
+      {{ storage_data_root_real | default(preflight_data_root) }} and no
+      usable storage_path was supplied (a value containing '<' is treated as
+      an unedited placeholder, i.e. unset; fuse mounts such as
+      Research-Drive-by-Link never qualify). Create a small volume in this
+      CO and attach it at launch — donation-only studies need only a small
+      one. There is NO boot-disk fallback: the study's config and pulled
+      data must survive workspace rebuilds.
+
+- name: Check storage_root exists and is a directory
+  ansible.builtin.stat:
+    path: "{{ storage_root }}"
+    follow: true   # a volume may be reached via a ~/data symlink
+  register: storage_stat
+
+- name: Fail if storage_root is not a directory
+  ansible.builtin.fail:
+    msg: >-
+      storage volume path '{{ storage_root }}' does not exist or is not a
+      directory. Attach a storage volume to the workspace (SRC mounts it at
+      /home/<user>/data/<volume-name>) or fix storage_path.
+  when: not storage_stat.stat.exists or not storage_stat.stat.isdir
+
+- name: Verify the storage volume is writable
+  ansible.builtin.file:
+    path: "{{ storage_root }}/.ddp-inspector-writable-probe"
+    state: touch
+    mode: "0600"
+  changed_when: false
+
+- name: Remove the writability probe
+  ansible.builtin.file:
+    path: "{{ storage_root }}/.ddp-inspector-writable-probe"
+    state: absent
+  changed_when: false
+
+- name: Resolve the inspector tree root fact
+  ansible.builtin.set_fact:
+    inspector_root: "{{ storage_root }}/ddp-inspector"
+
+# --- PHP service facts (consumed by inspector + refresh roles) ---------------
+
+- name: Determine PHP minor version from apt candidate (e.g. 8.3)
+  # The epoch prefix (e.g. "2:") is optional — Ubuntu 24.04's php-fpm
+  # candidate is unepoched ("Candidate: 8.3.6-1build1"), so both forms must
+  # resolve. regex_search returns a one-element list on match, None on no
+  # match; `| default([], true)` makes None safe to feed to `| first`
+  # (which itself yields Undefined, not an exception, on an empty list),
+  # so the whole pipeline falls back to '8.3' without a templating error.
+  ansible.builtin.set_fact:
+    php_minor_version: >-
+      {{ (preflight_php_policy.stdout
+          | regex_search('Candidate: (?:[0-9]+:)?([0-9]+\.[0-9]+)', '\1')
+          | default([], true))
+         | first | default('8.3', true) }}
+  when: not (preflight_skip_php | default(false) | bool)
+
+- name: Resolve php-fpm service facts
+  ansible.builtin.set_fact:
+    php_fpm_service: "php{{ php_minor_version | default('8.3') }}-fpm"
+    php_fpm_sock: "/run/php/php{{ php_minor_version | default('8.3') }}-fpm.sock"
+  when: not (preflight_skip_php | default(false) | bool)

@@ -20,3 +20,6 @@ transcripts/
 !examples/transcripts/
 !examples/transcripts/**/
 !examples/transcripts/**
+
+# Provisioning venv
+provisioning/.venv/

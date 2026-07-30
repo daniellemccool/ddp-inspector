@@ -1,0 +1,26 @@
+---
+# nginx -t validates the FULL config (SRC-Nginx server block + all
+# app-location includes) before any reload — a broken render must never
+# take the workspace's other web apps down.
+#
+# The conf-template task below notifies BOTH handlers directly (not one
+# handler notifying the next): Ansible only queues a handler's own notify
+# list when THAT handler reports changed=True, and "Validate nginx config"
+# is changed_when: false, so chaining notify from it would never fire.
+# Handlers run in the order they are DEFINED here (not notification order),
+# so "Validate nginx config" always runs before "Reload nginx service"; if
+# nginx -t fails, the handler run aborts for this host and the reload never
+# executes.
+- name: Validate nginx config
+  ansible.builtin.command: nginx -t
+  changed_when: false
+
+- name: Reload nginx service
+  ansible.builtin.service:
+    name: nginx
+    state: reloaded
+
+- name: Restart php-fpm
+  ansible.builtin.service:
+    name: "{{ php_fpm_service }}"
+    state: restarted

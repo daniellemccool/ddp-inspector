@@ -1,0 +1,86 @@
+---
+# Install the data-plane client binaries (pinned static builds), the refresh
+# + probe scripts, and the systemd units that drive them. systemd tasks are
+# gated on a real systemd (Tier-2 containers have none; live workspaces do).
+
+- name: Install gocmd (GoCommands static binary)
+  ansible.builtin.unarchive:
+    src: "{{ gocmd_url }}"
+    dest: /usr/local/bin
+    remote_src: true
+    mode: "0755"
+    owner: root
+    group: root
+    creates: /usr/local/bin/gocmd
+  # Confirmed against v0.12.2: the tarball extracts a single top-level
+  # `gocmd` (transcribe repo precedent; no strip-components needed).
+
+- name: Download rclone release archive
+  ansible.builtin.get_url:
+    url: "{{ rclone_url }}"
+    dest: "/opt/rclone-{{ rclone_version }}.zip"
+    mode: "0644"
+
+- name: Unpack rclone release
+  ansible.builtin.unarchive:
+    src: "/opt/rclone-{{ rclone_version }}.zip"
+    dest: /opt
+    remote_src: true
+    creates: "/opt/rclone-{{ rclone_version }}-linux-amd64/rclone"
+
+- name: Install rclone binary
+  ansible.builtin.copy:
+    src: "/opt/rclone-{{ rclone_version }}-linux-amd64/rclone"
+    dest: /usr/local/bin/rclone
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Create the inspector bin dir
+  ansible.builtin.file:
+    path: "{{ inspector_install_dir }}/bin"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the refresh script
+  ansible.builtin.template:
+    src: ddp-refresh.sh.j2
+    dest: "{{ inspector_install_dir }}/bin/ddp-refresh.sh"
+    owner: root
+    group: "{{ inspector_service_group }}"
+    mode: "0750"
+
+- name: Install the probe script
+  ansible.builtin.template:
+    src: ddp-probe.sh.j2
+    dest: "{{ inspector_install_dir }}/bin/ddp-probe.sh"
+    owner: root
+    group: "{{ inspector_service_group }}"
+    mode: "0750"
+
+- name: Install systemd units
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - ddp-refresh.service
+    - ddp-refresh.path
+    - ddp-refresh.timer
+  register: refresh_units
+
+- name: Enable the path and timer units
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+    enabled: true
+    state: started
+    daemon_reload: "{{ refresh_units is changed }}"
+  loop:
+    - ddp-refresh.path
+    - ddp-refresh.timer
+  when: ansible_service_mgr == 'systemd'

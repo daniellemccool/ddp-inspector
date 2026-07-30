@@ -1,0 +1,50 @@
+---
+# Entry playbook for the ddp-inspector SRC catalog component.
+# Run by SRC-External on the workspace itself (local connection, stock
+# Ansible). Study-blind by design: installs php-fpm + the app (from this
+# repo's own clone) behind the SRC-Nginx SRAM gate, plus the systemd
+# refresh machinery. ALL study configuration (flow exports, data source,
+# tickets/links) happens post-launch in the app's web UI and lives on the
+# storage volume — this play carries no secrets and no study identity.
+#
+# Required workspace shape (asserted by preflight, operator-facing):
+#   - SRC-Nginx ran earlier in the item (provides TLS + /validate).
+#   - Exactly one storage volume attached (or storage_path set explicitly).
+#
+# Optional parameters:
+#   inspector_base_path  URL prefix the app is served under (must match the
+#                        nginx location; default /inspector).
+#   storage_path         override for the storage volume mount path. Normally
+#                        leave unset/placeholder: preflight auto-detects the
+#                        single block-device volume mounted under <home>/data
+#                        ('<...>' placeholder counts as unset; fuse mounts
+#                        such as Research-Drive-by-Link never qualify).
+#
+# SRC parameter values arrive as extra-vars and take precedence. Booleans
+# may arrive as strings — every consumer coerces with `| bool`.
+- name: Provision ddp-inspector workspace
+  hosts: 127.0.0.1
+  connection: local
+  gather_facts: true
+  become: true
+  vars:
+    inspector_base_path: "/inspector"
+    inspector_install_dir: "/opt/ddp-inspector"
+    # Ubuntu php-fpm default pool user; owns the on-volume tree and runs
+    # the refresh service. Deliberately NOT a parameter (study-blind).
+    inspector_service_user: "www-data"
+    inspector_service_group: "www-data"
+    # GoCommands release (static binary; ticket-capable). Pinned — bump only
+    # against a verified gocmd/iRODS combo (transcribe repo precedent).
+    gocmd_version: "v0.12.2"
+    gocmd_release_base: "https://github.com/cyverse/gocommands/releases/download"
+    gocmd_url: "{{ gocmd_release_base }}/{{ gocmd_version }}/gocmd-{{ gocmd_version }}-linux-amd64.tar.gz"
+    # rclone release (static binary; WebDAV client for RD share links).
+    rclone_version: "v1.67.0"
+    rclone_url: "https://downloads.rclone.org/{{ rclone_version }}/rclone-{{ rclone_version }}-linux-amd64.zip"
+    # Upload ceiling for flow-export zips (nginx + PHP must agree).
+    inspector_upload_max: "64m"
+  roles:
+    - role: preflight
+    - role: inspector
+    - role: refresh
