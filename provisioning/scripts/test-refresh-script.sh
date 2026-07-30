@@ -96,6 +96,15 @@ render ddp-probe.sh.j2   "${TMP}/ddp-probe.sh"
 # ---- 1. unconfigured instance: exits 0, does nothing -------------------------
 check "unconfigured: exits 0"                "${TMP}/ddp-refresh.sh"
 
+# ---- 1b. unconfigured + flag: exits 0 AND flag consumed -----------------------
+# Reachable via the app's setup page, which can touch refresh-requested
+# before instance.json exists. Without consuming the flag here, systemd's
+# PathExists= unit re-triggers on every deactivation, loops to the
+# start-rate limit, and the path unit enters failed state.
+touch "${ROOT}/state/refresh-requested"
+check "unconfigured+flag: exits 0"           "${TMP}/ddp-refresh.sh"
+check "unconfigured+flag: flag consumed"     bash -c "! test -e '${ROOT}/state/refresh-requested'"
+
 # ---- 2. yoda happy path -------------------------------------------------------
 cat > "${ROOT}/config/instance.json" <<'J'
 {"study_name":"crime","source_mode":"yoda","local_path":null,"cadence":"off","default_n":15}

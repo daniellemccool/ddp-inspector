@@ -20,8 +20,12 @@ INBOX="${ROOT}/data/inbox"
 TRANSCRIPTS="${ROOT}/data/analyses/transcripts"
 CACHE="${ROOT}/cache"
 
-# Not configured yet (wizard not completed): quietly nothing to do.
-[ -f "${INSTANCE}" ] || exit 0
+# Not configured yet (wizard not completed): quietly nothing to do. A
+# refresh requested before setup completes is legitimately droppable — but
+# the flag MUST be consumed here, or systemd's PathExists= unit re-triggers
+# on every deactivation with the flag still present, loops to the start-rate
+# limit, and the path unit fails (requiring an operator to reset it).
+[ -f "${INSTANCE}" ] || { rm -f "${FLAG}"; exit 0; }
 
 # Flag present = requested run (button or fresh config). No flag = timer
 # tick: run only when the researcher chose a daily schedule.
