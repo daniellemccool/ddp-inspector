@@ -19,9 +19,10 @@
     fail_msg: >-
       {{ nginx_confdir | default('/etc/nginx/app-location-conf.d') }} is
       missing — the SRC-Nginx component ("Web Apps via Nginx") has not run on
-      this workspace. Add SRC-Nginx to the catalog item BEFORE ddp-inspector
-      (order: SRC-OS, SRC-CO, SRC-External plugin, SRC-Nginx, ddp-inspector)
-      and relaunch.
+      this workspace. External components ALL execute at the SRC-External
+      plugin's slot, so SRC-Nginx must be listed BEFORE SRC-External plugin
+      (order: SRC-OS, SRC-CO, SRC-Nginx, SRC-External plugin, then
+      ddp-inspector among the externals). Fix the item order and relaunch.
 
 - name: Check php availability (version floor 8.1; Ubuntu 24.04 ships 8.3)
   ansible.builtin.command: apt-cache policy php-fpm

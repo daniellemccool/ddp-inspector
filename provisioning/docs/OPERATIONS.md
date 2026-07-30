@@ -29,10 +29,15 @@ Researchers never need any of it: their surface is the web UI. Snag numbers
 
 Component order in ANY item that includes the inspector:
 
-    SRC-OS → SRC-CO → SRC-External plugin → SRC-Nginx → ddp-inspector
+    SRC-OS → SRC-CO → SRC-Nginx → SRC-External plugin → (externals: … → ddp-inspector)
 
-- SRC-External must precede any non-SURF component; SRC-Nginx must precede
-  the inspector (preflight fails otherwise, naming the fix).
+- External (non-SURF) components ALL execute at the SRC-External plugin's
+  slot, in their item order among themselves — a component's own list
+  position does NOT delay it past later SURF components (verified live
+  2026-07-30: an item listing SRC-Nginx after SRC-External never ran nginx
+  before the inspector, and preflight aborted the launch). So SRC-Nginx
+  must be LISTED before SRC-External plugin; ddp-inspector goes last among
+  the externals (preflight fails otherwise, naming the fix).
 - "Research Drive by Link" is OPTIONAL and not the researcher path (D9);
   add it only when an operator prefers a provision-time mount, and use the
   app's "folder on this workspace" mode pointed at `/data/<mountdir>`.
