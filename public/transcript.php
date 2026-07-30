@@ -35,14 +35,19 @@ $seg_info = function (array $seg): array {
     }
     return [$ps ? array_sum($ps) / count($ps) : null, trim($text)];
 };
+
 ?>
 <!doctype html>
 <meta charset="utf-8">
-<title>transcript <?= h($vid) ?></title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DDP Inspector — video <?= h($vid) ?></title>
 <link rel="stylesheet" href="<?= h(url('assets/style.css')) ?>">
 <main class="wrap">
-  <p><a href="<?= h(url('index.php')) ?>">← all participants</a></p>
-  <h1>transcript <?= h($vid) ?></h1>
+  <header class="site">
+    <a class="wordmark" href="<?= h(url('index.php')) ?>">DDP Inspector</a>
+    <nav class="crumbs"><a href="<?= h(url('index.php')) ?>">← all participants</a></nav>
+  </header>
+  <h1>Video <span class="id"><?= h($vid) ?></span></h1>
   <?php if ($txt === null && $meta === null): ?>
     <p class="notice">Not transcribed yet.</p>
   <?php else: ?>
@@ -52,9 +57,9 @@ $seg_info = function (array $seg): array {
       $srcOk = preg_match('~^https?://~', $srcUrl) === 1;
       $lang = lang_name(is_string($meta['language_detected'] ?? null) ? $meta['language_detected'] : null);
       $byline = [];
-      if (($vm['uploader'] ?? '') !== '') { $byline[] = '@' . $vm['uploader']; }
-      if (($vm['video_created_at'] ?? '') !== '') { $byline[] = 'posted ' . fmt_date_iso((string)$vm['video_created_at']); }
-      if ($lang !== null) { $byline[] = $lang; }
+      if (($vm['uploader'] ?? '') !== '') { $byline[] = '<span class="handle">@' . h((string)$vm['uploader']) . '</span>'; }
+      if (($vm['video_created_at'] ?? '') !== '') { $byline[] = h('posted ' . fmt_date_iso((string)$vm['video_created_at'])); }
+      if ($lang !== null) { $byline[] = h($lang); }
       $stats = [];
       foreach ([['view_count', 'views'], ['like_count', 'likes'], ['comment_count', 'comments']] as [$k, $label]) {
         if (is_numeric($vm[$k] ?? null)) {
@@ -66,9 +71,11 @@ $seg_info = function (array $seg): array {
       <section class="videometa">
         <?php if (($vm['video_description'] ?? '') !== ''): ?>
           <p class="eyebrow">video caption</p>
-          <p class="desc"><?= preg_replace('/(#\w+)/u', '<span class="tag">$1</span>', h((string)$vm['video_description'])) ?></p>
+          <?php // Hashtag muting runs on h()-escaped text: the (?<!&) guard keeps the
+                // pattern off the #039-style innards of entities h() just produced. ?>
+          <p class="desc"><?= preg_replace('/(?<!&)(#\w+)/u', '<span class="tag">$1</span>', h((string)$vm['video_description'])) ?></p>
         <?php endif; ?>
-        <?php if ($byline !== []): ?><p class="byline"><?= h(implode(' · ', $byline)) ?></p><?php endif; ?>
+        <?php if ($byline !== []): ?><p class="byline"><?= implode(' · ', $byline) ?></p><?php endif; ?>
         <?php if ($stats !== []): ?><p class="vstats"><?= implode(' · ', $stats) ?></p><?php endif; ?>
         <p class="meta">
           <?php if ($srcOk): ?><a href="<?= h($srcUrl) ?>" rel="noreferrer noopener" target="_blank">watch on TikTok ↗</a><?php endif; ?>
@@ -85,13 +92,18 @@ $seg_info = function (array $seg): array {
           ? sprintf('%d:%02d', intdiv((int)round((float)$meta['duration_s']), 60), (int)round((float)$meta['duration_s']) % 60)
           : null; ?>
       <p class="eyebrow">spoken transcript<?= $dur !== null ? ' · ' . h($dur) : '' ?></p>
-      <blockquote class="transcript-block"><?= h((string)$txt) ?></blockquote>
+      <?php if (trim((string)$txt) === ''): ?>
+        <p class="meta">No speech detected in this video.</p>
+      <?php else: ?>
+        <blockquote class="transcript-block"><?= h(trim((string)$txt)) ?></blockquote>
+      <?php endif; ?>
     <?php else: ?>
       <p class="notice">(transcript text file missing)</p>
     <?php endif; ?>
     <?php $segs = $meta['raw_signals']['segments'] ?? null; if (is_array($segs)): ?>
       <h2>Segment confidence</h2>
-      <table class="rows">
+      <p class="meta">Average Whisper token probability per segment — values below 0.50 are flagged.</p>
+      <table class="rows segments">
         <thead><tr><th>avg p</th><th>segment</th></tr></thead>
         <tbody>
         <?php foreach ($segs as $seg): [$avg, $stext] = $seg_info($seg); ?>
@@ -105,7 +117,7 @@ $seg_info = function (array $seg): array {
       <p class="notice">No raw_signals in this artifact (pre-Epic-1 schema).</p>
     <?php endif; ?>
     <?php if ($meta !== null): ?>
-      <details><summary>raw JSON</summary><pre><?= h(json_encode($meta, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) ?></pre></details>
+      <details class="raw"><summary>raw JSON</summary><pre><?= h(json_encode($meta, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) ?></pre></details>
     <?php endif; ?>
   <?php endif; ?>
 </main>

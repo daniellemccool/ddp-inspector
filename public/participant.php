@@ -19,11 +19,15 @@ $docs = flows_load_all();
 ?>
 <!doctype html>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>DDP Inspector — <?= h($id) ?></title>
 <link rel="stylesheet" href="<?= h(url('assets/style.css')) ?>">
 <main class="wrap">
-  <p><a href="<?= h(url('index.php')) ?>">← all participants</a></p>
-  <h1>participant <?= h($id) ?></h1>
+  <header class="site">
+    <a class="wordmark" href="<?= h(url('index.php')) ?>">DDP Inspector</a>
+    <nav class="crumbs"><a href="<?= h(url('index.php')) ?>">← all participants</a></nav>
+  </header>
+  <h1>Participant <span class="id"><?= h($id) ?></span></h1>
   <p class="samplesize">sample size:
     <?php foreach ([10, 15, 20, 50] as $opt): ?>
       <a href="<?= h(url('participant.php?id=' . rawurlencode($id) . '&n=' . $opt . '&seed=' . $seed . ($showAllRows ? '&all=1' : ''))) ?>"<?= $opt === $n ? ' class="cur"' : '' ?>><?= $opt ?></a>
@@ -53,7 +57,7 @@ $docs = flows_load_all();
       <?php foreach ($scope['tables'] as $name => $s):
           $title = ($match[$name] ?? null) !== null ? $doc['sections'][$match[$name]]['title'] : flows_prettify($name); ?>
         <tr><td><?= h($title) ?></td><td class="num"><?= number_format($s['count']) ?></td>
-            <td><?= h(fmt_ts($s['earliest'])) ?></td><td><?= h(fmt_ts($s['latest'])) ?></td></tr>
+            <td class="date"><?= h(fmt_ts($s['earliest'])) ?></td><td class="date"><?= h(fmt_ts($s['latest'])) ?></td></tr>
       <?php endforeach; ?>
       </tbody>
     </table>
@@ -85,8 +89,12 @@ $docs = flows_load_all();
           <tbody>
           <?php foreach ($sample as $row): ?>
             <tr>
-              <?php foreach ($cols as $c): ?><td><?= h(is_scalar($row[$c] ?? null) ? (string)$row[$c] : '') ?></td><?php endforeach; ?>
-              <td><?php foreach (analysis_row_links($slug, $row) as $link): ?>
+              <?php foreach ($cols as $c):
+                  $cellClass = preg_match('/date|time/i', $c) ? ' class="date"'
+                      : (preg_match('/link|url/i', $c) ? ' class="url"' : ''); ?>
+                <td<?= $cellClass ?>><?= h(is_scalar($row[$c] ?? null) ? (string)$row[$c] : '') ?></td>
+              <?php endforeach; ?>
+              <td class="actions"><?php foreach (analysis_row_links($slug, $row) as $link): ?>
                     <a href="<?= h($link['url']) ?>"><?= h($link['label']) ?></a>
                   <?php endforeach; ?></td>
             </tr>
