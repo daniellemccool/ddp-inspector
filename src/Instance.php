@@ -199,10 +199,19 @@ function inst_probe(): array {
             return ['ok' => false, 'count' => null,
                     'message' => 'Connection test unavailable on this machine — you can still save and refresh.'];
         }
-        $tmp = tempnam(sys_get_temp_dir(), 'gocfg');
-        file_put_contents($tmp, inst_gocmd_config($src)); @chmod($tmp, 0600);
-        $r = inst_run([$bin, '-c', $tmp, 'ls', (string)$src['collection']], 15);
-        @unlink($tmp);
+        // gocmd's -c takes a config DIRECTORY holding irods_environment.json;
+        // the read ticket goes via -T and the path gets the i: prefix — the
+        // exact invocation the provisioning probe script uses (verified live).
+        $dir = sys_get_temp_dir() . '/ddpi-gocfg-' . bin2hex(random_bytes(6));
+        if (!@mkdir($dir, 0700)) {
+            return ['ok' => false, 'count' => null,
+                    'message' => 'Connection test unavailable on this machine — you can still save and refresh.'];
+        }
+        file_put_contents("$dir/irods_environment.json", inst_gocmd_config($src));
+        @chmod("$dir/irods_environment.json", 0600);
+        $r = inst_run([$bin, '-c', $dir, '-T', (string)$src['ticket'],
+                       'ls', 'i:' . (string)$src['collection']], 15);
+        @unlink("$dir/irods_environment.json"); @rmdir($dir);
         if ($r['code'] === 0) { return ['ok' => true, 'count' => null, 'message' => 'Connected ✓ — your access code works.']; }
         return ['ok' => false, 'count' => null,
                 'message' => 'Could not connect. Your access code may have expired — ask your data manager for a new one.'];
@@ -315,13 +324,22 @@ function inst_handle_setup_post(array $post, array $files): array {
 }
 
 function inst_gocmd_config(array $src): string {
-    // Credential-free anonymous read-ticket config (validated pattern 2026-07-13;
-    // field names must match the transcribe repo's ticket config — verify once
-    // against d3i-infra/researchcloud-ddp-transcribe when wiring Plan 2's refresh
-    // script, and adjust ONLY here if they differ).
-    return "irods_host: {$src['host']}\n"
-         . "irods_port: 1247\n"
-         . "irods_zone_name: {$src['zone']}\n"
-         . "irods_user_name: anonymous\n"
-         . "irods_ticket: {$src['ticket']}\n";
+    // Credential-free anonymous read-ticket environment, byte-compatible with
+    // the provisioning refresh/probe scripts (ddp-probe.sh.j2 — the form
+    // verified live against Yoda). gocmd receives this as
+    // <config-dir>/irods_environment.json via -c, with the ticket passed
+    // separately via -T. Keep the three in sync.
+    return json_encode([
+        'irods_host' => (string)$src['host'],
+        'irods_port' => 1247,
+        'irods_zone_name' => (string)$src['zone'],
+        'irods_client_zone_name' => (string)$src['zone'],
+        'irods_user_name' => 'anonymous',
+        'irods_client_user_name' => 'anonymous',
+        'irods_authentication_scheme' => 'native',
+        'irods_default_hash_scheme' => 'SHA256',
+        'irods_client_server_policy' => 'CS_NEG_REQUIRE',
+        'irods_client_server_negotiation' => 'request_server_negotiation',
+        'irods_ssl_verify_server' => 'hostname',
+    ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n";
 }
