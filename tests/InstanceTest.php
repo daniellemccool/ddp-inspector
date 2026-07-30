@@ -118,4 +118,19 @@ ob_start(); $ok = guard_configured(); $out = ob_get_clean();
 eq($ok, false, 'guard blocks unconfigured instance');
 check(str_contains($out, 'setup.php'), 'guard points at setup');
 
+// local-folder candidate discovery (bounded scan, own tree excluded)
+$scan = $scratch . '/scan';
+mkdir("$scan/vol1/inbox", 0777, true);
+mkdir("$scan/vol1/ddp-inspector", 0777, true);
+mkdir("$scan/vol2", 0777, true);
+mkdir("$scan/rdbylink", 0777, true);
+file_put_contents("$scan/vol1/inbox/a.json", '{}');
+file_put_contents("$scan/rdbylink/b.json", '{}');
+file_put_contents("$scan/vol1/ddp-inspector/self.json", '{}');
+$GLOBALS['__cfg']['storage_root'] = "$scan/vol1/ddp-inspector";
+eq(inst_local_folder_candidates($scan), ["$scan/rdbylink", "$scan/vol1/inbox"],
+   'candidates: donation folders found, empty vol skipped, own tree excluded');
+eq(inst_local_folder_candidates("$scan/does-not-exist"), [], 'missing scan root -> no candidates');
+$GLOBALS['__cfg']['storage_root'] = $scratch;
+
 $GLOBALS['__cfg'] = $GLOBALS['__cfg_saved_inst'];

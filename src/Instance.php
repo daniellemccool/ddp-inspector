@@ -96,6 +96,57 @@ function inst_donation_count(): int {
     return count(glob(rtrim($dir, '/') . '/*.json') ?: []);
 }
 
+// Bounded so a huge (or fuse-mounted) directory can't stall the setup page.
+function inst_dir_has_donations(string $dir, int $limit = 500): bool {
+    $dh = @opendir($dir);
+    if ($dh === false) { return false; }
+    $seen = 0;
+    while (($f = readdir($dh)) !== false && $seen++ < $limit) {
+        if (str_ends_with($f, '.json')) { closedir($dh); return true; }
+    }
+    closedir($dh);
+    return false;
+}
+
+/**
+ * Folders on this workspace that already hold donation files — offered as
+ * pick-from suggestions for local mode. Scans the SRC volume/mount root and
+ * one level below it (e.g. a pipeline volume's inbox/), skipping the
+ * inspector's own tree so local mode can never point the inbox at itself.
+ * @return string[]
+ */
+function inst_local_folder_candidates(string $scanRoot = '/data'): array {
+    if (!is_dir($scanRoot)) { return []; }
+    $own = inst_root();
+    $ownReal = $own !== null ? (realpath($own) ?: $own) : null;
+    $underOwn = function (string $p) use ($ownReal): bool {
+        if ($ownReal === null) { return false; }
+        $r = realpath($p) ?: $p;
+        return $r === $ownReal || str_starts_with($r . '/', $ownReal . '/');
+    };
+    $listDirs = function (string $dir, int $limit = 200): array {
+        $dh = @opendir($dir);
+        if ($dh === false) { return []; }
+        $out = [];
+        $seen = 0;
+        while (($e = readdir($dh)) !== false && $seen++ < $limit) {
+            if ($e === '.' || $e === '..' || $e[0] === '.') { continue; }
+            if (is_dir("$dir/$e")) { $out[] = "$dir/$e"; }
+        }
+        closedir($dh);
+        return $out;
+    };
+    $found = [];
+    foreach ($listDirs($scanRoot) as $top) {
+        foreach (array_merge([$top], $listDirs($top)) as $dir) {
+            if ($underOwn($dir)) { continue; }
+            if (inst_dir_has_donations($dir)) { $found[] = $dir; }
+        }
+    }
+    sort($found);
+    return array_values(array_unique($found));
+}
+
 /** @return array{code:int, out:string} */
 function inst_run(array $argv, int $timeoutSec): array {
     $bin = $argv[0];
