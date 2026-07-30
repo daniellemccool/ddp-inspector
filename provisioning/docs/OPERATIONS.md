@@ -48,7 +48,11 @@ Component order in ANY item that includes the inspector:
     editing the item and launching fresh.
 - Firewall: item defaults (22/80/443) suffice; everything the inspector
   runs binds localhost. 3389 open with nothing listening is S15 — leave it.
-- Access button: Webinterface (https:).
+- Access button: declare a component-level access format — label
+  `DDP Inspector`, format `https://==REVERSE_PROXY==/inspector/` — so the
+  workspace card deep-links into the app (the domain root serves 403; no
+  root location exists). Static text: if an item overrides
+  `inspector_base_path`, update the format to match.
 
 ## 3. Volumes
 
