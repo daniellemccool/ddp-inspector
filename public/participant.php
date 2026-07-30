@@ -7,6 +7,8 @@ $id   = is_string($_GET['id'] ?? null) ? $_GET['id'] : '';
 $seed = max(1, (int)(is_scalar($_GET['seed'] ?? null) ? $_GET['seed'] : 1));
 $n    = max(1, (int)(is_scalar($_GET['n'] ?? null) ? $_GET['n'] : cfg('default_n', 15)));
 
+$showAllRows = ($_GET['all'] ?? '') === '1';
+$txIds = analysis_available_ids('transcripts');
 $participant = ddp_load_participant((string)inst_effective_ddp_dir(), $id);
 if ($participant === null) {
     http_response_code(404);
@@ -24,9 +26,16 @@ $docs = flows_load_all();
   <h1>participant <?= h($id) ?></h1>
   <p class="samplesize">sample size:
     <?php foreach ([10, 15, 20, 50] as $opt): ?>
-      <a href="<?= h(url('participant.php?id=' . rawurlencode($id) . '&n=' . $opt . '&seed=' . $seed)) ?>"<?= $opt === $n ? ' class="cur"' : '' ?>><?= $opt ?></a>
+      <a href="<?= h(url('participant.php?id=' . rawurlencode($id) . '&n=' . $opt . '&seed=' . $seed . ($showAllRows ? '&all=1' : ''))) ?>"<?= $opt === $n ? ' class="cur"' : '' ?>><?= $opt ?></a>
     <?php endforeach; ?>
   </p>
+  <p class="meta"><?php if (!$showAllRows): ?>
+    Rows whose video has no transcript yet are hidden —
+    <a href="<?= h(url('participant.php?id=' . rawurlencode($id) . '&n=' . $n . '&seed=' . $seed . '&all=1')) ?>">include them</a>
+  <?php else: ?>
+    Showing all rows, including untranscribed videos —
+    <a href="<?= h(url('participant.php?id=' . rawurlencode($id) . '&n=' . $n . '&seed=' . $seed)) ?>">hide untranscribed</a>
+  <?php endif; ?></p>
 
   <?php foreach ($participant['platforms'] as $slug => $entry):
       $doc = $docs[$slug] ?? null;
@@ -52,19 +61,25 @@ $docs = flows_load_all();
     <?php foreach ($order as $name):
         $rows = $entry['tables'][$name] ?? [];
         if (!$rows) { continue; }
+        [$rowsShown, $hiddenRows] = $showAllRows ? [$rows, 0]
+            : analysis_filter_rows_with_artifacts($slug, $rows, $txIds);
         $secIdx = $match[$name] ?? null;
         $title = $secIdx !== null ? $doc['sections'][$secIdx]['title'] : flows_prettify($name);
         $desc = $secIdx !== null ? $doc['sections'][$secIdx]['description'] : '';
         $cols = $secIdx !== null ? $doc['sections'][$secIdx]['vars'] : array_keys($rows[0]);
-        $sample = sample_rows($rows, $n, $seed, $name);
+        $sample = sample_rows($rowsShown, $n, $seed, $name);
         $del = (int)($entry['deleted'][$name] ?? 0);
-        $reshuffle = url('participant.php?id=' . rawurlencode($id) . '&n=' . $n . '&seed=' . ($seed + 1)); ?>
+        $reshuffle = url('participant.php?id=' . rawurlencode($id) . '&n=' . $n . '&seed=' . ($seed + 1) . ($showAllRows ? '&all=1' : '')); ?>
       <section>
-        <h3><?= h($title) ?> <span class="count"><?= number_format(count($rows)) ?> rows</span>
-          <?php if (count($rows) > count($sample)): ?><a class="reshuffle" href="<?= h($reshuffle) ?>">reshuffle sample</a><?php endif; ?>
+        <h3><?= h($title) ?> <span class="count"><?= number_format(count($rows)) ?> rows<?php
+          if ($hiddenRows > 0): ?> · <?= number_format(count($rowsShown)) ?> with transcripts<?php endif; ?></span>
+          <?php if (count($rowsShown) > count($sample)): ?><a class="reshuffle" href="<?= h($reshuffle) ?>">reshuffle sample</a><?php endif; ?>
         </h3>
         <?php if ($desc !== ''): ?><p class="meta"><?= h($desc) ?></p><?php endif; ?>
         <?php if ($del > 0): ?><p class="meta">Participant removed <?= $del ?> row(s) before donating.</p><?php endif; ?>
+        <?php if ($rowsShown === [] && $hiddenRows > 0): ?>
+          <p class="meta">None of these <?= number_format($hiddenRows) ?> rows have transcripts yet.</p>
+        <?php else: ?>
         <table class="rows">
           <thead><tr><?php foreach ($cols as $c): ?><th><?= h($c) ?></th><?php endforeach; ?><th></th></tr></thead>
           <tbody>
@@ -78,6 +93,7 @@ $docs = flows_load_all();
           <?php endforeach; ?>
           </tbody>
         </table>
+        <?php endif; ?>
       </section>
     <?php endforeach; ?>
   <?php endforeach; ?>

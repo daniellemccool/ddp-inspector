@@ -60,6 +60,24 @@ function analysis_ids_fingerprint(array $ids): string {
     return (string)($st['finished_at'] ?? '') . ':' . count($ids);
 }
 
+/** Keep rows whose linked entity has an artifact available; rows with no
+ *  linkable entity at all (comments, searches, …) always stay.
+ *  @return array{0: list<array>, 1: int} [kept rows, hidden count] */
+function analysis_filter_rows_with_artifacts(string $platform, array $rows, array $ids): array {
+    $mods = array_filter(analysis_modules(), fn($m) => $m['platform'] === $platform);
+    if ($mods === []) { return [$rows, 0]; }
+    $kept = []; $hidden = 0;
+    foreach ($rows as $row) {
+        $id = null;
+        foreach ($mods as $mod) {
+            $id = ($mod['entity_id'])($row);
+            if ($id !== null) { break; }
+        }
+        if ($id === null || isset($ids[$id])) { $kept[] = $row; } else { $hidden++; }
+    }
+    return [$kept, $hidden];
+}
+
 /** @return array{txt:?string, json:?string} */
 function analysis_transcript_paths(string $vid): array {
     $dir = analysis_dir('transcripts');
