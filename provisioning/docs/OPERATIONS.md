@@ -74,6 +74,11 @@ Two volumes attached (e.g. a team's analyses drive alongside ours) → set
 `storage_path` explicitly at launch (S10); auto-detect refuses to guess.
 fuse mounts (RD-by-Link) never qualify as the storage volume.
 
+Auto-detect reads the MOUNT TABLE under `/data/` (where SRC mounts external
+volumes) — necessary because provisioning runs as the cloud user before any
+SRAM user's `~/data` symlink exists (live finding 2026-07-30); the home
+data-dir scan remains as a fallback for shared-mount shapes.
+
 ## 4. Yoda read tickets (the "access code")
 
 Minted by the data manager on a machine with an authenticated gocmd

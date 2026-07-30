@@ -179,4 +179,39 @@ check "php non-epoch candidate: play succeeds (no crash)" bash -c "! grep -q 'fa
 check "php non-epoch candidate: service resolved"         grep -qF "php_fpm_service=[php8.3-fpm]" "${TMP}/c13.log"
 check "php non-epoch candidate: sock resolved"             grep -qF "php_fpm_sock=[/run/php/php8.3-fpm.sock]" "${TMP}/c13.log"
 
+# ---- provision-time detection (mount table under the platform data root) ----
+# During a real SRC create the play runs as the cloud user (ubuntu): no home
+# data-dir symlink exists yet, and the volume is only visible as its mount
+# under /data/<volume-name> (live failure 2026-07-30). storage_platform_data_root
+# is the seam standing in for /data.
+PDATA="${TMP}/pdata"
+
+# ---- 14. provision-time shape: volume mounted under /data, home data dir missing
+rm -rf "${DATA}" "${PDATA}"; mkdir -p "${PDATA}/vol1"
+run c14.log -e "storage_platform_data_root=${PDATA}" \
+  -e "$(mounts "${PDATA}/vol1:xfs" "${PDATA}/rdbylink:fuse.rclone")"
+check "provision shape: play succeeds"        bash -c "! grep -q 'failed=1' '${TMP}/c14.log'"
+check "provision shape: volume adopted"       grep -qF "RESOLVED storage_root=[${PDATA}/vol1]" "${TMP}/c14.log"
+
+# ---- 15. mount scan + symlinked home data root agree -> ONE candidate, no ambiguity
+rm -rf "${DATA}" "${PDATA}"; mkdir -p "${PDATA}/vol1"
+ln -s "${PDATA}" "${DATA}"
+run c15.log -e "storage_platform_data_root=${PDATA}" -e "$(mounts "${PDATA}/vol1:xfs")"
+check "dual detection: no spurious ambiguity" bash -c "! grep -q 'failed=1' '${TMP}/c15.log'"
+check "dual detection: volume adopted"        grep -qF "RESOLVED storage_root=[${PDATA}/vol1]" "${TMP}/c15.log"
+
+# ---- 16. home entry is a symlink to an already-counted mount -> deduped ------
+rm -rf "${DATA}" "${PDATA}"; mkdir -p "${DATA}" "${PDATA}/vol1"
+ln -s "${PDATA}/vol1" "${DATA}/vol1"
+run c16.log -e "storage_platform_data_root=${PDATA}" -e "$(mounts "${PDATA}/vol1:xfs")"
+check "symlink dedupe: no spurious ambiguity" bash -c "! grep -q 'failed=1' '${TMP}/c16.log'"
+check "symlink dedupe: volume adopted"        grep -qF "RESOLVED storage_root=[${PDATA}/vol1]" "${TMP}/c16.log"
+
+# ---- 17. two volumes under /data -> loud ambiguity failure -------------------
+rm -rf "${DATA}" "${PDATA}"; mkdir -p "${PDATA}/vol1" "${PDATA}/vol2"
+run c17.log -e "storage_platform_data_root=${PDATA}" \
+  -e "$(mounts "${PDATA}/vol1:xfs" "${PDATA}/vol2:ext4")"
+check "two /data volumes: play fails"         grep -q 'failed=1' "${TMP}/c17.log"
+check "two /data volumes: ambiguity named"    grep -qi 'set storage_path explicitly' "${TMP}/c17.log"
+
 echo; [ "${FAIL}" -eq 0 ] && echo "ALL PASS" || { echo "${FAIL} FAILURES"; exit 1; }
