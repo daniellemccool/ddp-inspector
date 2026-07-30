@@ -16,6 +16,12 @@ function cfg_ready(): bool { return is_array($GLOBALS['__cfg'] ?? null); }
 function cfg(string $key, $default = null) { return $GLOBALS['__cfg'][$key] ?? $default; }
 function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 function url(string $rel): string { $base = rtrim((string)cfg('base_path', ''), '/'); return $base === '' ? $rel : $base . '/' . ltrim($rel, '/'); }
+/** Static asset URL with an mtime version tag, so browsers revalidate on deploy. */
+function asset_url(string $rel): string {
+    $v = @filemtime(__DIR__ . '/../public/' . $rel) ?: 0;
+    return url($rel) . '?v=' . $v;
+}
+
 function fmt_ts(?int $ts): string { return $ts === null ? '—' : gmdate('Y-m-d H:i', $ts); }
 
 /** Human-scale counts: 3,181 · 11.4M · 1.1B (full value belongs in a title attr). */

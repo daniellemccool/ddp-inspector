@@ -41,7 +41,7 @@ $seg_info = function (array $seg): array {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>DDP Inspector — video <?= h($vid) ?></title>
-<link rel="stylesheet" href="<?= h(url('assets/style.css')) ?>">
+<link rel="stylesheet" href="<?= h(asset_url('assets/style.css')) ?>">
 <main class="wrap">
   <header class="site">
     <a class="wordmark" href="<?= h(url('index.php')) ?>">DDP Inspector</a>
