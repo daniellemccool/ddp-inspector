@@ -55,6 +55,13 @@ die() { # die <researcher-facing message>
   exit 1
 }
 count_donations() { find -L "${INBOX}" -maxdepth 1 -name '*.json' 2>/dev/null | wc -l | tr -d ' '; }
+ensure_real_inbox_dir() { # yoda/rd-link only: strip a stale local-mode symlink
+  # before pulling, so a source-mode switch never syncs/mirrors through it
+  # into whatever external folder it pointed at. Unlinking a symlink only
+  # removes the link itself — it never touches the target folder's contents.
+  [ -L "${INBOX}" ] && rm -f "${INBOX}"
+  mkdir -p "${INBOX}"
+}
 
 MODE="$(jq -r '.source_mode // ""' "${INSTANCE}")"
 echo "[refresh] $(date -u +%FT%TZ) mode=${MODE} requested=${REQUESTED} cadence=${CADENCE}"
@@ -88,7 +95,7 @@ EOF
     "${GOCMD}" ls -c "${GDIR}" -T "${TICKET}" "i:${COLLECTION}" >/dev/null \
       || die "Could not reach the donation data. The access code may have expired or been revoked — ask your data manager for a new one, paste it in Setup, and try again."
     write_status pulling - - "Fetching donations…"
-    mkdir -p "${INBOX}"
+    ensure_real_inbox_dir
     "${GOCMD}" sync -c "${GDIR}" -T "${TICKET}" "i:${COLLECTION}/inbox" "${ROOT}/data" \
       || die "Fetching donations stopped partway. This is usually temporary — try again in a few minutes."
     # Transcripts: prefer a server-side extracted tree if it ever appears
@@ -124,7 +131,7 @@ EOF
     "${RCLONE}" lsd :webdav: "${RFLAGS[@]}" >/dev/null \
       || die "Could not open the Research Drive share link. The link may have expired or the password may be wrong — create a new share link, paste it in Setup, and try again."
     write_status pulling - - "Fetching donations…"
-    mkdir -p "${INBOX}"
+    ensure_real_inbox_dir
     "${RCLONE}" sync :webdav: "${INBOX}" "${RFLAGS[@]}" --include '*.json' \
       || die "Fetching donations stopped partway. This is usually temporary — try again in a few minutes."
     ;;
@@ -132,7 +139,11 @@ EOF
     LOCAL_PATH="$(jq -r '.local_path // ""' "${INSTANCE}")"
     [ -n "${LOCAL_PATH}" ] && [ -d "${LOCAL_PATH}" ] && [ -r "${LOCAL_PATH}" ] \
       || die "The configured folder (${LOCAL_PATH:-not set}) is missing or unreadable on this workspace — an operator needs to check the Setup 'folder on this workspace' path."
-    if [ ! -L "${INBOX}" ]; then
+    if [ -L "${INBOX}" ]; then
+      # Already a symlink: only touch it if the configured folder changed —
+      # removing/replacing a symlink never touches the old target's contents.
+      [ "$(readlink "${INBOX}")" = "${LOCAL_PATH}" ] || { rm -f "${INBOX}"; ln -s "${LOCAL_PATH}" "${INBOX}"; }
+    else
       rm -rf "${INBOX}"
       ln -s "${LOCAL_PATH}" "${INBOX}"
     fi

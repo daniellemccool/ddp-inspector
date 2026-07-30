@@ -162,6 +162,39 @@ check "local: run succeeds"                  "${TMP}/ddp-refresh.sh"
 check "local: inbox is a symlink"            test -L "${ROOT}/data/inbox"
 check "local: donations counted"             bash -c "[ \"\$(jq -r .donations '${ROOT}/state/refresh-status.json')\" = 1 ]"
 
+# ---- 7b. local re-config: symlink re-points when local_path changes -------------
+# INBOX is still the symlink to SRCDIR from case 7. Switching local_path
+# (while staying in local mode) must re-point the symlink, not leave it
+# stale — and must never touch the old folder's contents when doing so.
+SRCDIR2="${TMP}/pipeline-inbox-2"; mkdir -p "${SRCDIR2}"
+echo '{}' > "${SRCDIR2}/assignment=1_task=2_participant=p3_source=youtube_key=3-youtube.json"
+cat > "${ROOT}/config/instance.json" <<J
+{"study_name":"pig","source_mode":"local","local_path":"${SRCDIR2}","cadence":"off","default_n":15}
+J
+touch "${ROOT}/state/refresh-requested"
+check "local re-point: run succeeds"         "${TMP}/ddp-refresh.sh"
+check "local re-point: symlink retargeted"   bash -c "[ \"\$(readlink '${ROOT}/data/inbox')\" = '${SRCDIR2}' ]"
+check "local re-point: donations counted"    bash -c "[ \"\$(jq -r .donations '${ROOT}/state/refresh-status.json')\" = 1 ]"
+check "local re-point: old folder untouched" test -f "${SRCDIR}/assignment=1_task=2_participant=p2_source=tiktok_key=2-tiktok.json"
+
+# ---- 7c. source-mode switch: local -> rd-link replaces the stale symlink --------
+# INBOX is still a symlink (now into SRCDIR2). Switching to rd-link must
+# strip that symlink and sync into a REAL directory — never mirror-sync
+# straight through it into SRCDIR2 (which would delete files there).
+SENTINEL="${SRCDIR2}/DO-NOT-TOUCH.sentinel"
+echo "sentinel-content" > "${SENTINEL}"
+cat > "${ROOT}/config/instance.json" <<'J'
+{"study_name":"insta2","source_mode":"rd-link","local_path":null,"cadence":"off","default_n":15}
+J
+cat > "${ROOT}/config/source.json" <<'J'
+{"mode":"rd-link","webdav_url":"https://researchdrive.example/public.php/webdav/","share_token":"abc123","password":"pw"}
+J
+touch "${ROOT}/state/refresh-requested"
+check "switch local->rd-link: run succeeds"      "${TMP}/ddp-refresh.sh"
+check "switch local->rd-link: inbox is real dir" bash -c "[ ! -L '${ROOT}/data/inbox' ] && [ -d '${ROOT}/data/inbox' ]"
+check "switch local->rd-link: donation landed"   bash -c "ls '${ROOT}/data/inbox' | grep -q instagram"
+check "switch local->rd-link: old folder untouched" bash -c "[ \"\$(cat '${SENTINEL}')\" = sentinel-content ]"
+
 # ---- 8. timer tick with cadence=off and no flag: exits 0, no run -----------------
 LAST="$(jq -r .started_at "${ROOT}/state/refresh-status.json")"
 check "timer+off: exits 0"                   "${TMP}/ddp-refresh.sh"
