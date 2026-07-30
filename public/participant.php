@@ -7,8 +7,7 @@ $id   = is_string($_GET['id'] ?? null) ? $_GET['id'] : '';
 $seed = max(1, (int)(is_scalar($_GET['seed'] ?? null) ? $_GET['seed'] : 1));
 $n    = max(1, (int)(is_scalar($_GET['n'] ?? null) ? $_GET['n'] : cfg('default_n', 15)));
 
-$loaded = ddp_load_dir((string)inst_effective_ddp_dir());
-$participant = $loaded['participants'][$id] ?? null;
+$participant = ddp_load_participant((string)inst_effective_ddp_dir(), $id);
 if ($participant === null) {
     http_response_code(404);
     echo '<!doctype html><title>Not found</title><p>Participant not found (404).</p>';

@@ -1,5 +1,6 @@
 <?php
-require_once __DIR__ . '/../src/Ddp.php';
+putenv('DDP_INSPECTOR_CONFIG=' . __DIR__ . '/config.test.php');
+require_once __DIR__ . '/../src/bootstrap.php';
 
 $dir = __DIR__ . '/fixtures/ddp';
 $p1  = $dir . '/assignment=1_task=1_participant=p1_source=tiktok_key=1-tiktok.json';
@@ -43,3 +44,30 @@ $loaded = ddp_load_dir($dir);
 eq(array_keys($loaded['participants']), ['p1'], 'only conforming participant loaded');
 eq(count($loaded['skipped']), 1, 'one skipped file reported');
 eq(count($loaded['participants']['p1']['platforms']['tiktok']['tables']['tiktok_comments']), 2, 'comments present under platform');
+
+// --- summaries mirror the full parse (participant list path) ---------------
+$sums = ddp_load_dir_summaries($dir);
+eq(array_keys($sums['participants']), array_keys($loaded['participants']), 'summaries: same participants as full parse');
+eq(count($sums['skipped']), count($loaded['skipped']), 'summaries: same skip count');
+foreach ($loaded['participants'] as $pid => $p) {
+    foreach ($p['platforms'] as $slug => $entry) {
+        $full = stats_platform_scope($entry['tables'], []);
+        $lite = stats_scope_from_summaries($sums['participants'][$pid]['platforms'][$slug]['tables']);
+        eq($lite['total_rows'], $full['total_rows'], "summaries: rows match for $pid/$slug");
+        eq($lite['earliest'], $full['earliest'], "summaries: earliest matches for $pid/$slug");
+        eq($lite['latest'], $full['latest'], "summaries: latest matches for $pid/$slug");
+    }
+}
+$sums2 = ddp_load_dir_summaries(__DIR__ . '/fixtures/ddp2');
+eq($sums2['participants']['p2']['platforms']['instagram']['key_millis'], 5, 'summaries: newest key wins');
+eq($sums2['participants']['p2']['platforms']['instagram']['superseded'],
+   ['assignment=1_task=1_participant=p2_source=instagram_key=3-instagram.json'], 'summaries: supersede recorded');
+
+// --- targeted single-participant load (participant page path) ---------------
+$one = ddp_load_participant($dir, 'p1');
+check($one !== null, 'targeted load finds participant');
+eq(array_keys($one['platforms']), array_keys($loaded['participants']['p1']['platforms']), 'targeted load: same platforms');
+eq(count($one['platforms']['tiktok']['tables']['tiktok_comments']), 2, 'targeted load: full rows present');
+eq(ddp_load_participant($dir, 'no-such-participant'), null, 'targeted load: unknown id -> null');
+eq(ddp_load_participant($dir, '../../etc'), null, 'targeted load: unsafe id rejected');
+eq(ddp_load_participant($dir, ''), null, 'targeted load: empty id rejected');

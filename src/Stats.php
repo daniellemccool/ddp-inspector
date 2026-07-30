@@ -43,6 +43,20 @@ function stats_section_summary(array $rows): array {
     return ['count' => $count, 'earliest' => $earliest, 'latest' => $latest];
 }
 
+/** Aggregate already-computed per-table summaries (ddp_summarize_file's
+ *  shape) without any row data.
+ *  @param array<string,array{count:int,earliest:?int,latest:?int}> $summaries */
+function stats_scope_from_summaries(array $summaries): array {
+    $total = 0; $earliest = null; $latest = null;
+    foreach ($summaries as $s) {
+        $total += (int)($s['count'] ?? 0);
+        $e = $s['earliest'] ?? null; $l = $s['latest'] ?? null;
+        if ($e !== null && ($earliest === null || $e < $earliest)) { $earliest = $e; }
+        if ($l !== null && ($latest === null || $l > $latest)) { $latest = $l; }
+    }
+    return ['total_rows' => $total, 'earliest' => $earliest, 'latest' => $latest];
+}
+
 /** @param array<string,list<array>> $tables @param list<string> $order */
 function stats_platform_scope(array $tables, array $order): array {
     $out = []; $total = 0; $earliest = null; $latest = null;

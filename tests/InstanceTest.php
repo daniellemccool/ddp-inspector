@@ -140,6 +140,20 @@ ob_start(); $ok = guard_configured(); $out = ob_get_clean();
 eq($ok, false, 'guard blocks unconfigured instance');
 check(str_contains($out, 'setup.php'), 'guard points at setup');
 
+// donation-summary disk cache: hit on (mtime,size) match, recompute on change
+$fixture = __DIR__ . '/fixtures/ddp/assignment=1_task=1_participant=p1_source=tiktok_key=1-tiktok.json';
+$sum1 = ddp_summarize_file_cached($fixture);
+check(is_array($sum1) && $sum1['participant'] === 'p1', 'summary computed in storage mode');
+$cacheFile = "$scratch/cache/stats/" . basename($fixture) . '.stats.json';
+check(is_file($cacheFile), 'summary cache file written');
+$c = inst_read_json($cacheFile);
+$c['summary']['participant'] = 'sentinel-from-cache';
+inst_write_json_atomic($cacheFile, $c);
+eq(ddp_summarize_file_cached($fixture)['participant'], 'sentinel-from-cache', 'unchanged file served from cache');
+$c['_mtime'] = 1;
+inst_write_json_atomic($cacheFile, $c);
+eq(ddp_summarize_file_cached($fixture)['participant'], 'p1', 'stale cache recomputed');
+
 // local-folder candidate discovery (bounded scan, own tree excluded)
 $scan = $scratch . '/scan';
 mkdir("$scan/vol1/inbox", 0777, true);
