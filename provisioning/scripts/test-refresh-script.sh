@@ -115,7 +115,7 @@ check "unconfigured+flag: flag consumed"     bash -c "! test -e '${ROOT}/state/r
 
 # ---- 2. yoda happy path -------------------------------------------------------
 cat > "${ROOT}/config/instance.json" <<'J'
-{"study_name":"crime","source_mode":"yoda","local_path":null,"cadence":"off","default_n":15}
+{"study_name":"example","source_mode":"yoda","local_path":null,"cadence":"off","default_n":15}
 J
 cat > "${ROOT}/config/source.json" <<'J'
 {"mode":"yoda","collection":"/coll","env":{"irods_host":"yoda.example","irods_port":1247,"irods_zone_name":"nluu10p","irods_user_name":"r@uu.nl","irods_authentication_scheme":"pam_password"},"password":"dap-secret"}

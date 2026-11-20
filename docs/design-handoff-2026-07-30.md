@@ -9,7 +9,7 @@ product owner — treat that as the brief's energy level.*
 ## What this app is
 
 A study-blind PHP viewer for data-donation packages (DDPs), used by research
-teams (currently the Crime Perceptions study) to browse participants'
+teams to browse participants'
 donated TikTok data and read Whisper transcripts of the videos they watched.
 Users are social-science researchers, not developers. It runs server-rendered
 behind a SURF Research Cloud SRAM login; there is **no JS framework, no build
@@ -20,16 +20,16 @@ plain PHP templates.
 
 ```bash
 cp config.php.example config.php   # then set:
-# 'ddp_dir'         => '/home/dmm/data/d3i/uu_tiktok/research-tiktok-crime-policing/pilot-tiktok-inbox',
-# 'transcripts_dir' => '/home/dmm/data/d3i/uu_tiktok/inspector-demo/transcripts-enriched',
+# 'ddp_dir'         => '/path/to/a/study/pilot-inbox',
+# 'transcripts_dir' => '/path/to/transcripts-enriched',
 ./run-dev.sh                        # php -S on http://127.0.0.1:8110
 ```
 
 The enriched transcripts tree gives you real captions, uploader names,
 view/like/comment counts, and pretty dates to design against. For a fuller
-participant list, point `ddp_dir` at
-`…/research-tiktok-crime-policing/inbox` (142 files, up to 24 MB each —
-first index load computes summaries; fine locally).
+participant list, point `ddp_dir` at a full study inbox (well over a
+hundred files, up to tens of MB each — first index load computes
+summaries; fine locally).
 
 `config.php` is gitignored — edit freely.
 

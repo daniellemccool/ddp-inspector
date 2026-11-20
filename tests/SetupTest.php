@@ -24,7 +24,7 @@ $cfgJson = '{"irods_host": "lp0555.its.uu.nl", "irods_port": 1247, "irods_home":
     . ' "irods_authentication_scheme": "pam_password", "irods_encryption_algorithm": "AES-256-CBC",'
     . ' "irods_encryption_key_size": 32, "irods_client_server_policy": "CS_NEG_REQUIRE"}';
 $r = inst_handle_setup_post(['action' => 'save_source', 'csrf' => csrf_token(),
-    'source_mode' => 'yoda', 'study_name' => 'Crime study',
+    'source_mode' => 'yoda', 'study_name' => 'Example study',
     'collection' => '/nluu10p/home/research-x', 'irods_config' => $cfgJson, 'yoda_password' => 'DAP123'], []);
 eq($r['flash'][0]['kind'], 'ok', 'yoda source saved');
 eq(inst_load()['source_mode'], 'yoda', 'instance saved');
@@ -42,10 +42,10 @@ check(!str_contains($html, 'DAP123'), 'data access password never echoed');
 // Re-saving "About your study" (e.g. a new study name) with the config box
 // and password left blank keeps both — the password field shows "saved ✓".
 $r = inst_handle_setup_post(['action' => 'save_source', 'csrf' => csrf_token(),
-    'source_mode' => 'yoda', 'study_name' => 'Crime study (renamed)',
+    'source_mode' => 'yoda', 'study_name' => 'Example study (renamed)',
     'collection' => '/nluu10p/home/research-x', 'irods_config' => '', 'yoda_password' => ''], []);
 eq($r['flash'][0]['kind'], 'ok', 'yoda re-save with blank config and password accepted');
-eq(inst_load()['study_name'], 'Crime study (renamed)', 'study name updated on re-save');
+eq(inst_load()['study_name'], 'Example study (renamed)', 'study name updated on re-save');
 eq(inst_source_load()['password'], 'DAP123', 'blank password keeps the saved DAP');
 eq(inst_source_load()['env']['irods_user_name'] ?? null, 'r@uu.nl', 'blank config box keeps the saved config');
 
@@ -56,7 +56,7 @@ file_put_contents($yml, "irods_host: \"lp0555.its.uu.nl\"\nirods_port: 1247\niro
     . "irods_user_name: \"r@uu.nl\"\nirods_zone_name: \"nluu10p\"\nirods_authentication_scheme: \"pam_password\"\n"
     . "irods_encryption_key_size: 32\n");
 $r = inst_handle_setup_post(['action' => 'save_source', 'csrf' => csrf_token(),
-    'source_mode' => 'yoda', 'study_name' => 'Crime study',
+    'source_mode' => 'yoda', 'study_name' => 'Example study',
     'collection' => '/nluu10p/home/research-x', 'irods_config' => '{"not": "used"}', 'yoda_password' => ''],
     ['irods_config_file' => ['tmp_name' => $yml, 'error' => UPLOAD_ERR_OK]]);
 eq($r['flash'][0]['kind'], 'ok', 'uploaded YAML config accepted');
@@ -66,7 +66,7 @@ eq(inst_source_load()['password'], 'DAP123', 'same user: blank password keeps th
 
 // A configuration for a DIFFERENT user needs its own password.
 $r = inst_handle_setup_post(['action' => 'save_source', 'csrf' => csrf_token(),
-    'source_mode' => 'yoda', 'study_name' => 'Crime study',
+    'source_mode' => 'yoda', 'study_name' => 'Example study',
     'collection' => '/nluu10p/home/research-x',
     'irods_config' => str_replace('r@uu.nl', 'other@uu.nl', $cfgJson), 'yoda_password' => ''], []);
 eq($r['flash'][0]['kind'], 'error', 'new user with blank password rejected');
@@ -74,7 +74,7 @@ eq(inst_source_load()['env']['irods_user_name'] ?? null, 'r@uu.nl', 'rejected sa
 
 // An incomplete paste is rejected with a pointer to the portal.
 $r = inst_handle_setup_post(['action' => 'save_source', 'csrf' => csrf_token(),
-    'source_mode' => 'yoda', 'study_name' => 'Crime study',
+    'source_mode' => 'yoda', 'study_name' => 'Example study',
     'collection' => '/nluu10p/home/research-x', 'irods_config' => '{"irods_host": "x"}', 'yoda_password' => 'D'], []);
 eq($r['flash'][0]['kind'], 'error', 'incomplete config rejected');
 check(str_contains($r['flash'][0]['text'], 'Yoda portal'), 'incomplete config points at the Yoda portal');

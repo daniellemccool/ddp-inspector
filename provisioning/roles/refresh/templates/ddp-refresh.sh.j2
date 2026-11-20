@@ -129,7 +129,7 @@ case "${MODE}" in
       # Python, not unzip: Next's export zips store no permission bits
       # (unzip creates mode-000 files nobody can read) and trip unzip 6.0's
       # overlapped-components "zip bomb" check (live finding 2026-11-20 on
-      # the crime-study export; zipfile.testzip() finds every entry intact).
+      # a real Next export; zipfile.testzip() finds every entry intact).
       # Basename only: flattens the study folder and rules out path traversal.
       python3 -I - "${ZIP}" "${STAGE}" <<'PY' \
         || die "Unpacking donations failed. Try refreshing again."

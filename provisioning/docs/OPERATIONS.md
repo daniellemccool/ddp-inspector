@@ -68,7 +68,7 @@ growability first):
 | Study shape | Volume |
 |---|---|
 | Donation-only (mono studies; MBs of JSON) | 10 GB |
-| Crime-policing (transcripts: tars + extracted ≈ 2× tree) | 60–90 GB at campaign end |
+| Transcript-heavy (tars + extracted ≈ 2× tree) | 2–3× the transcript tars |
 
 Two volumes attached (e.g. a team's analyses drive alongside ours) → set
 `storage_path` explicitly at launch (S10); auto-detect refuses to guess.
@@ -95,14 +95,14 @@ The researcher supplies three things in Setup:
    `config.yml`), uploaded, or the block pasted. It is stored unchanged
    (`irods_*` keys only, password keys dropped) as `source.json`'s `env`
    and written out as gocmd's `irods_environment.json`. No defaults: each
-   Yoda instance publishes its own host, zone and auth settings (the
-   crime study's is `lp0555.its.uu.nl`, `pam_password`).
+   Yoda instance publishes its own host, zone and auth settings (e.g.
+   `pam_password` login).
 2. **A data access password (DAP)** created in the Yoda portal (not the
    UU password; DAPs expire). Stored in `source.json` (0600, service user)
    and handed to gocmd only via `IRODS_USER_PASSWORD`, never in a file or
    argv. Rotation = create a new DAP, paste it in Setup.
 3. **The folder path**: the full iRODS path, zone and home included
-   (`/nluu10p/home/research-tiktok-crime-policing`).
+   (`/nluu10p/home/research-<group>`).
 
 What the refresh reads under the folder:
 
@@ -114,8 +114,8 @@ What the refresh reads under the folder:
     transcripts-tars/shard-*.tar     optional, pulled whole then unpacked
 
 `inbox/` is preferred when both exist. Size the volume for the transcript
-tars: the crime study's 100 shards are 30.7 GiB, all pulled before
-unpacking.
+tars: all shards are pulled before any is unpacked, so the volume needs
+roughly the tar total plus the unpacked tree.
 
 ## 5. Research Drive share links
 
@@ -152,9 +152,8 @@ self-heals on workspaces provisioned or updated after that fix.
 2. Append the ddp-inspector component (Development) to the sandbox item —
    first integration launch; verify auto-detect ignores the RD-by-Link
    fuse mount if present.
-3. Crime-study viewer: yoda mode against the campaign collection; verify
-   participant `69f39df5fdef5b2e2a84011b` shows watch 90,466 /
-   favorites 5,384 / likes 2,973 / shares 55 / comments 30.
+3. First real study: yoda mode against its collection; verify one
+   hand-checked participant's per-section row counts.
 4. Record a validation log from day one.
 
 Live-validation results (2026-07-30, sandbox): `gocmd sync` REJECTS `-T`
@@ -163,11 +162,11 @@ the refresh script pulls with `get -f` everywhere (re-download, not delta
 sync). SRC-Nginx on Ubuntu 24.04 and the php8.3-fpm socket path are
 verified live on the deployed image.
 
-Live-validation results (2026-11-20, `ddpinspector.perceptionsofcr`):
-Yoda login with the researcher's own portal configuration + DAP via
-`IRODS_USER_PASSWORD` connects from the workspace and fetches; the crime
-study's export zip yields 143 donation files (142 real + test participant
-`laura2`, hide it in the UI). The 2026-07 ticket-era results above are
+Live-validation results (2026-11-20): Yoda login with the researcher's own
+portal configuration + DAP via `IRODS_USER_PASSWORD` connects from a
+workspace and fetches; a real Next export zip extracts correctly (test
+participants in an export show up like any other — hide them in the UI).
+The 2026-07 ticket-era results above are
 client-side flag findings only — anonymous login never worked.
 
 ## 8. Updating a running workspace

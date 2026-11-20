@@ -111,7 +111,7 @@ def make_participant(n_watch, n_fav, n_like, n_share, n_comment,
 
 def write_ddp(sections, key_ms):
     pid = hex_id()
-    name = (f"assignment=406_task=954_participant={pid}"
+    name = (f"assignment=900_task=901_participant={pid}"
             f"_source=tiktok_key={key_ms}-tiktok.json")
     (DDP_DIR / name).write_text(
         json.dumps(sections, ensure_ascii=False, indent=1) + "\n")

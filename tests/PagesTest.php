@@ -28,7 +28,7 @@ check(!str_contains($html, 'participant.php?id=preview'), 'index does not list s
 $html = render_page('participant.php', ['id' => 'p1', 'seed' => '1', 'n' => '1']);
 check(str_contains($html, 'tiktok_watch_history') || str_contains($html, 'Tiktok watch history'), 'participant shows watch history table');
 check(str_contains($html, 'Igual estoy yo') || str_contains($html, 'second comment'), 'comment text rendered generically');
-check(str_contains($html, 'transcript.php?vid=7654562293757250829'), 'video row links to transcript via analysis module');
+check(str_contains($html, 'transcript.php?vid=7000000000000000029'), 'video row links to transcript via analysis module');
 check(str_contains($html, 'seed=2'), 'reshuffle link bumps seed');
 check(str_contains($html, '<h2>') && str_contains(strtolower($html), 'tiktok'), 'platform heading present');
 
@@ -36,7 +36,7 @@ $missing = render_page('participant.php', ['id' => 'nope']);
 check(str_contains($missing, 'not found') || str_contains($missing, '404'), 'unknown participant -> not found');
 
 // --- transcript.php ---
-$ok = render_page('transcript.php', ['vid' => '7654562293757250829']);
+$ok = render_page('transcript.php', ['vid' => '7000000000000000029']);
 check(str_contains($ok, 'Hello world this is a test'), 'transcript text rendered');
 check(str_contains($ok, '0.42') || str_contains($ok, 'low'), 'low-confidence segment surfaced');
 check(str_contains($ok, '<td>Hello world</td>'), 'segment text derived from tokens, marker tokens skipped');

@@ -967,7 +967,7 @@ check "unconfigured: exits 0"                "${TMP}/ddp-refresh.sh"
 
 # ---- 2. yoda happy path -------------------------------------------------------
 cat > "${ROOT}/config/instance.json" <<'J'
-{"study_name":"crime","source_mode":"yoda","local_path":null,"cadence":"off","default_n":15}
+{"study_name":"example","source_mode":"yoda","local_path":null,"cadence":"off","default_n":15}
 J
 cat > "${ROOT}/config/source.json" <<'J'
 {"mode":"yoda","collection":"/coll","host":"fsw.data.uu.nl","zone":"nluu10p","ticket":"tkt123"}
@@ -1661,7 +1661,7 @@ growability first):
 | Study shape | Volume |
 |---|---|
 | Donation-only (mono studies; MBs of JSON) | 10 GB |
-| Crime-policing (transcripts: tars + extracted ≈ 2× tree) | 60–90 GB at campaign end |
+| Transcript-heavy (tars + extracted ≈ 2× tree) | 2–3× the transcript tars |
 
 Two volumes attached (e.g. a team's analyses drive alongside ours) → set
 `storage_path` explicitly at launch (S10); auto-detect refuses to guess.
@@ -1710,9 +1710,8 @@ failure is always safe.
 2. Append the ddp-inspector component (Development) to the sandbox item —
    first integration launch; verify auto-detect ignores the RD-by-Link
    fuse mount if present.
-3. Crime-study viewer: yoda mode against the campaign collection; verify
-   participant `69f39df5fdef5b2e2a84011b` shows watch 90,466 /
-   favorites 5,384 / likes 2,973 / shares 55 / comments 30.
+3. First real study: yoda mode against its collection; verify one
+   hand-checked participant's per-section row counts.
 4. Record a validation log from day one.
 
 Live-validation items the hermetic tests CANNOT cover (check on the

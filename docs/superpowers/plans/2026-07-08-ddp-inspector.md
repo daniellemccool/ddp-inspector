@@ -48,18 +48,18 @@
 ```json
 [
   {"deleted row count": 0, "tiktok_watch_history": [
-    {"Date": "2026-07-05 11:53:55", "Link": "https://www.tiktokv.com/share/video/7654562293757250829/"},
-    {"Date": "2026-06-30 09:12:00", "Link": "https://www.tiktokv.com/share/video/7640857640611925279/"},
-    {"Date": "2026-01-30 23:24:12", "Link": "https://www.tiktokv.com/share/video/7588657359338196254/"}
+    {"Date": "2026-07-05 11:53:55", "Link": "https://www.tiktokv.com/share/video/7000000000000000029/"},
+    {"Date": "2026-06-30 09:12:00", "Link": "https://www.tiktokv.com/share/video/7000000000000000279/"},
+    {"Date": "2026-01-30 23:24:12", "Link": "https://www.tiktokv.com/share/video/7000000000000000154/"}
   ]},
   {"deleted row count": 0, "tiktok_favorite_videos": [
-    {"Date": "2026-07-05 11:41:49", "Link": "https://www.tiktokv.com/share/video/7658513515249929480/"}
+    {"Date": "2026-07-05 11:41:49", "Link": "https://www.tiktokv.com/share/video/7000000000000000080/"}
   ]},
   {"deleted row count": 0, "tiktok_like_list": [
-    {"Date": "2026-06-27 19:16:39", "Link": "https://www.tiktokv.com/share/video/7654562293757250829/"}
+    {"Date": "2026-06-27 19:16:39", "Link": "https://www.tiktokv.com/share/video/7000000000000000029/"}
   ]},
   {"deleted row count": 0, "tiktok_share_history": [
-    {"Date": "2026-01-07 00:28:13", "SharedContent": "share_video", "Link": "https://www.tiktokv.com/share/video/7588657359338196254/", "Method": "sms"}
+    {"Date": "2026-01-07 00:28:13", "SharedContent": "share_video", "Link": "https://www.tiktokv.com/share/video/7000000000000000154/", "Method": "sms"}
   ]},
   {"deleted row count": 0, "tiktok_comments": [
     {"Date": "2026-05-28 01:36:28 UTC", "Comment": "Igual estoy yo"},
@@ -112,7 +112,7 @@ eq(ddp_participant_id_from_filename('/x/no-segment.json'), 'no-segment', 'partic
 $sections = ddp_parse_file($p1);
 eq(is_array($sections), true, 'parse returns array for conforming file');
 eq(count($sections['tiktok_watch_history']), 3, 'watch history rows');
-eq($sections['tiktok_watch_history'][0]['Link'], 'https://www.tiktokv.com/share/video/7654562293757250829/', 'watch link');
+eq($sections['tiktok_watch_history'][0]['Link'], 'https://www.tiktokv.com/share/video/7000000000000000029/', 'watch link');
 eq(isset($sections['deleted row count']), false, 'non-array keys ignored');
 
 eq(ddp_parse_file($dir . '/assignment=1_task=1_participant=preview_source=tiktok_key=2-tiktok.json'), null, 'preview stub is skipped (null)');
@@ -229,8 +229,8 @@ git commit -m "feat: DDP parsing + test harness (skip non-conforming, merge per 
 require_once __DIR__ . '/../src/Ddp.php';
 require_once __DIR__ . '/../src/Stats.php';
 
-eq(stats_canonical_video_id('https://www.tiktokv.com/share/video/7654562293757250829/'), '7654562293757250829', 'canonical tiktokv share');
-eq(stats_canonical_video_id('https://www.tiktok.com/@user/video/7654562293757250829'), '7654562293757250829', 'canonical @user form');
+eq(stats_canonical_video_id('https://www.tiktokv.com/share/video/7000000000000000029/'), '7000000000000000029', 'canonical tiktokv share');
+eq(stats_canonical_video_id('https://www.tiktok.com/@user/video/7000000000000000029'), '7000000000000000029', 'canonical @user form');
 eq(stats_canonical_video_id('https://vm.tiktok.com/abc123/'), null, 'short link not canonical');
 eq(stats_canonical_video_id('not a url'), null, 'garbage not canonical');
 
@@ -246,7 +246,7 @@ eq($wh['count'], 3, 'watch count');
 eq($wh['earliest'], gmmktime(23,24,12,1,30,2026), 'watch earliest');
 eq($wh['latest'], gmmktime(11,53,55,7,5,2026), 'watch latest');
 
-// video 7654562293757250829 appears in both watch and like -> deduped
+// video 7000000000000000029 appears in both watch and like -> deduped
 eq(stats_unique_video_count($p1['sections']), 4, 'unique videos across watch/fav/like deduped');
 
 $scope = stats_participant_scope($p1);
@@ -665,7 +665,7 @@ $html = render_page('participant.php', ['id' => 'p1', 'seed' => '1']);
 check(str_contains($html, 'tiktok_watch_history'), 'participant shows watch history section');
 check(str_contains($html, 'tiktok_comments'), 'participant shows comments section');
 check(str_contains($html, 'Igual estoy yo') || str_contains($html, 'second comment'), 'comment text rendered');
-check(str_contains($html, 'transcript.php?vid=7654562293757250829'), 'video row links to transcript');
+check(str_contains($html, 'transcript.php?vid=7000000000000000029'), 'video row links to transcript');
 check(str_contains($html, 'seed=2'), 'reshuffle link bumps seed');
 
 $missing = render_page('participant.php', ['id' => 'nope']);
@@ -773,8 +773,8 @@ git commit -m "feat: per-participant page — scope table, sampled sections, res
 
 **Files:**
 - Create: `public/transcript.php`
-- Create: `tests/fixtures/transcripts/29/7654562293757250829.txt`
-- Create: `tests/fixtures/transcripts/29/7654562293757250829.json`
+- Create: `tests/fixtures/transcripts/29/7000000000000000029.txt`
+- Create: `tests/fixtures/transcripts/29/7000000000000000029.json`
 - Modify: `tests/PagesTest.php` (append)
 
 **Interfaces:**
@@ -783,12 +783,12 @@ git commit -m "feat: per-participant page — scope table, sampled sections, res
 
 - [ ] **Step 1: Create transcript fixtures**
 
-`tests/fixtures/transcripts/29/7654562293757250829.txt`:
+`tests/fixtures/transcripts/29/7000000000000000029.txt`:
 ```
 Hello world this is a test transcript.
 ```
 
-`tests/fixtures/transcripts/29/7654562293757250829.json`:
+`tests/fixtures/transcripts/29/7000000000000000029.json`:
 ```json
 {
   "model": "small",
@@ -808,7 +808,7 @@ Hello world this is a test transcript.
 
 ```php
 // --- transcript.php ---
-$ok = render_page('transcript.php', ['vid' => '7654562293757250829']);
+$ok = render_page('transcript.php', ['vid' => '7000000000000000029']);
 check(str_contains($ok, 'Hello world this is a test'), 'transcript text rendered');
 check(str_contains($ok, '0.42') || str_contains($ok, 'low'), 'low-confidence segment surfaced');
 
