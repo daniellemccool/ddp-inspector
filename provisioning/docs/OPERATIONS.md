@@ -137,6 +137,15 @@ Operator path (all researcher-visible state lives on the volume):
 The refresh is flock-serialized and idempotent — re-running after any
 failure is always safe.
 
+**Site down with ERR_CONNECTION_REFUSED:** check `sudo systemctl status
+nginx`. SRC-Nginx's `authentication.conf` proxies to
+`gw.live.surfresearchcloud.nl`, which nginx resolves at start; a DNS hiccup
+during any restart leaves nginx failed with `host not found in upstream`
+(seen 2026-11-20 06:38, reported to SURF). `sudo systemctl start nginx`
+recovers it. The playbook installs a `Restart=on-failure` drop-in
+(`/etc/systemd/system/nginx.service.d/ddp-inspector-restart.conf`) so this
+self-heals on workspaces provisioned or updated after that fix.
+
 ## 7. Validation ladder (per spec §8)
 
 1. Sandbox item (SRC-OS/SRC-CO/SRC-External/SRC-Nginx) — hand-prototype.
@@ -153,3 +162,28 @@ Live-validation results (2026-07-30, sandbox): `gocmd sync` REJECTS `-T`
 the refresh script pulls with `get -f` everywhere (re-download, not delta
 sync). SRC-Nginx on Ubuntu 24.04 and the php8.3-fpm socket path are
 verified live on the deployed image.
+
+Live-validation results (2026-11-20, `ddpinspector.perceptionsofcr`):
+Yoda login with the researcher's own portal configuration + DAP via
+`IRODS_USER_PASSWORD` connects from the workspace and fetches; the crime
+study's export zip yields 143 donation files (142 real + test participant
+`laura2`, hide it in the UI). The 2026-07 ticket-era results above are
+client-side flag findings only — anonymous login never worked.
+
+## 8. Updating a running workspace
+
+The playbook is idempotent and all study configuration lives on the
+volume, so updating = re-running it on the workspace from a fresh clone
+(the repo is public; the roles use only `ansible.builtin`, so plain
+ansible-core 2.18, SRC's version, is enough; `uv` is on SRC images):
+
+    git clone --depth 1 --branch <branch-or-main> \
+      https://github.com/daniellemccool/ddp-inspector.git /tmp/ddpi
+    php /tmp/ddpi/tests/run.php            # app tests; php-cli is installed
+    sudo /usr/local/bin/uv tool run --from 'ansible-core>=2.18,<2.19' \
+      ansible-playbook -i 127.0.0.1, /tmp/ddpi/provisioning/deploy-ddp-inspector.yaml
+    rm -rf /tmp/ddpi
+
+Expect `failed=0`. Setup settings (data source, DAP, flows) survive. After
+the run, wait until a refresh started BEFORE the update has finished
+before reading the status line: it reflects the last completed run.

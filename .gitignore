@@ -23,3 +23,6 @@ transcripts/
 
 # Provisioning venv
 provisioning/.venv/
+
+# Session notes for Claude Code (local only)
+CLAUDE.md
