@@ -104,8 +104,53 @@ EOF
     # ("unknown shorthand flag") — only ls/get accept tickets (live finding
     # 2026-07-30, matching the 2026-07-13 ls/get verification). get -f
     # re-downloads instead of delta-syncing; acceptable at donation scale.
-    "${GOCMD}" get -c "${GDIR}" -T "${TICKET}" -f "i:${COLLECTION}/inbox" "${ROOT}/data" \
-      || die "Fetching donations stopped partway. This is usually temporary — try again in a few minutes."
+    if "${GOCMD}" ls -c "${GDIR}" -T "${TICKET}" "i:${COLLECTION}/inbox" >/dev/null 2>&1; then
+      # Loose donation files in <collection>/inbox (the original layout).
+      "${GOCMD}" get -c "${GDIR}" -T "${TICKET}" -f "i:${COLLECTION}/inbox" "${ROOT}/data" \
+        || die "Fetching donations stopped partway. This is usually temporary — try again in a few minutes."
+    elif "${GOCMD}" ls -c "${GDIR}" -T "${TICKET}" "i:${COLLECTION}/donations" >/dev/null 2>&1; then
+      # Next export zips in <collection>/donations/<YYYYMMDD>_<study>.zip.
+      # Each export is a full snapshot, so the newest one IS the study's
+      # current state: extract only its donation files (…_source=…), not
+      # onboarding answers or Next preview-mode test donations, and mirror
+      # them into the inbox so a withdrawn donation disappears as well.
+      rm -rf "${CACHE}/donations"
+      "${GOCMD}" get -c "${GDIR}" -T "${TICKET}" -f "i:${COLLECTION}/donations" "${CACHE}" \
+        || die "Fetching donations stopped partway. This is usually temporary — try again in a few minutes."
+      ZIP="$(find "${CACHE}/donations" -maxdepth 1 -type f -name '*.zip' 2>/dev/null | sort | tail -n 1)"
+      [ -n "${ZIP}" ] \
+        || die "The donations folder on the data store has no export in it yet — ask your data manager to upload the latest export, then try again."
+      write_status extracting - - "Unpacking donations…"
+      STAGE="${ROOT}/data/.inbox-staging"
+      rm -rf "${STAGE}"; mkdir -p "${STAGE}"
+      # Python, not unzip: Next's export zips store no permission bits
+      # (unzip creates mode-000 files nobody can read) and trip unzip 6.0's
+      # overlapped-components "zip bomb" check (live finding 2026-11-20 on
+      # the crime-study export; zipfile.testzip() finds every entry intact).
+      # Basename only: flattens the study folder and rules out path traversal.
+      python3 -I - "${ZIP}" "${STAGE}" <<'PY' \
+        || die "Unpacking donations failed. Try refreshing again."
+import fnmatch, os, shutil, sys, zipfile
+src, out = sys.argv[1], sys.argv[2]
+n = 0
+with zipfile.ZipFile(src) as z:
+    for info in z.infolist():
+        name = os.path.basename(info.filename)
+        if info.is_dir() or not fnmatch.fnmatchcase(name, "*_source=*.json"):
+            continue
+        if "_participant=preview_" in name:
+            continue
+        with z.open(info) as r, open(os.path.join(out, name), "wb") as w:
+            shutil.copyfileobj(r, w)
+        n += 1
+print(f"[refresh] extracted {n} donation file(s) from {os.path.basename(src)}")
+PY
+      find "${INBOX}" -maxdepth 1 -type f -name '*.json' -delete
+      find "${STAGE}" -maxdepth 1 -type f -name '*.json' -exec mv -t "${INBOX}" {} +
+      rm -rf "${STAGE}" "${CACHE}/donations"
+    else
+      die "No donations were found in that folder on the data store. Check the folder path in Setup with your data manager."
+    fi
     # Transcripts: prefer a server-side extracted tree if it ever appears
     # (FSW-unblock optimization); otherwise pull shard tars and extract
     # locally (the required path while server-side extraction is blocked).

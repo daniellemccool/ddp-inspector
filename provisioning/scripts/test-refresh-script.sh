@@ -138,6 +138,74 @@ touch "${ROOT}/state/refresh-requested"
 check "yoda rerun: succeeds (idempotent)"    "${TMP}/ddp-refresh.sh"
 check "yoda rerun: phase done again"         bash -c "[ \"\$(jq -r .phase '${ROOT}/state/refresh-status.json')\" = done ]"
 
+# ---- 4b. yoda Next-export layout: donations/<date>_<study>.zip, no inbox/ -----
+# The export zip holds one study folder with donation files (…_source=…),
+# onboarding answers, and Next preview-mode test donations. Only real
+# donations from the NEWEST export land, and the inbox mirrors it (a file
+# left from an earlier pull — donor1.json from case 4 — must disappear).
+rm -rf "${FAKE_REMOTE}/coll/inbox"
+mkdir -p "${FAKE_REMOTE}/coll/donations" "${TMP}/zx/new/20260728_study" "${TMP}/zx/old/20260701_study"
+DON="assignment=1_task=2_participant=p9_source=tiktok_key=9-tiktok.json"
+ONB="assignment=1_participant=p9_key=9-onboarding.json"
+PRV="assignment=1_task=2_participant=preview_source=tiktok_key=8-tiktok.json"
+OLD="assignment=1_task=2_participant=pold_source=tiktok_key=1-tiktok.json"
+for f in "${DON}" "${ONB}" "${PRV}"; do echo '{}' > "${TMP}/zx/new/20260728_study/${f}"; done
+echo '{}' > "${TMP}/zx/old/20260701_study/${OLD}"
+(cd "${TMP}/zx/new" && zip -qr "${FAKE_REMOTE}/coll/donations/20260728_study.zip" 20260728_study)
+(cd "${TMP}/zx/old" && zip -qr "${FAKE_REMOTE}/coll/donations/20260701_study.zip" 20260701_study)
+check "export: stale inbox file present before" test -f "${ROOT}/data/inbox/donor1.json"
+touch "${ROOT}/state/refresh-requested"
+check "export: run succeeds"                 "${TMP}/ddp-refresh.sh"
+check "export: donation landed (flat)"       test -f "${ROOT}/data/inbox/${DON}"
+check "export: onboarding not extracted"     bash -c "! test -e '${ROOT}/data/inbox/${ONB}'"
+check "export: preview not extracted"        bash -c "! test -e '${ROOT}/data/inbox/${PRV}'"
+check "export: older export ignored"         bash -c "! test -e '${ROOT}/data/inbox/${OLD}'"
+check "export: inbox mirrors the export"     bash -c "! test -e '${ROOT}/data/inbox/donor1.json'"
+check "export: donations counted"            bash -c "[ \"\$(jq -r .donations '${ROOT}/state/refresh-status.json')\" = 1 ]"
+check "export: zips pruned from cache"       bash -c "! ls '${ROOT}/cache/donations'/*.zip"
+check "export: no staging dir left behind"   bash -c "! test -e '${ROOT}/data/.inbox-staging'"
+check "export: donation readable"            test -r "${ROOT}/data/inbox/${DON}"
+
+# ---- 4b'. Next's real export quirk: entries carry NO permission bits ------------
+# (zipinfo shows ?---------; unzip would write mode-000 files). Rewrite the
+# fake export with zeroed external attributes and require readable output.
+python3 -I - "${FAKE_REMOTE}/coll/donations/20260728_study.zip" <<'PY'
+import sys, zipfile
+p = sys.argv[1]
+items = [(i, zipfile.ZipFile(p).read(i.filename)) for i in zipfile.ZipFile(p).infolist()]
+with zipfile.ZipFile(p, "w", zipfile.ZIP_DEFLATED) as z:
+    for i, data in items:
+        i.external_attr = 0
+        z.writestr(i, data)
+PY
+rm -f "${ROOT}/data/inbox"/*.json
+touch "${ROOT}/state/refresh-requested"
+check "export no-perm zip: run succeeds"     "${TMP}/ddp-refresh.sh"
+check "export no-perm zip: donation readable" test -r "${ROOT}/data/inbox/${DON}"
+check "export: transcripts still extracted"  test -f "${ROOT}/data/analyses/transcripts/42/7000000000000000042.txt"
+
+# ---- 4c. export with no donation files yet: done, zero donations ---------------
+rm -f "${FAKE_REMOTE}/coll/donations"/*.zip
+mkdir -p "${TMP}/zx/empty/20260801_study"; echo '{}' > "${TMP}/zx/empty/20260801_study/${ONB}"
+(cd "${TMP}/zx/empty" && zip -qr "${FAKE_REMOTE}/coll/donations/20260801_study.zip" 20260801_study)
+touch "${ROOT}/state/refresh-requested"
+check "export no donations: run succeeds"    "${TMP}/ddp-refresh.sh"
+check "export no donations: zero counted"    bash -c "[ \"\$(jq -r .donations '${ROOT}/state/refresh-status.json')\" = 0 ]"
+
+# ---- 4d. empty donations/ folder: plain-language error --------------------------
+rm -f "${FAKE_REMOTE}/coll/donations"/*.zip
+touch "${ROOT}/state/refresh-requested"
+"${TMP}/ddp-refresh.sh" || true
+check "export missing zip: phase error"      bash -c "[ \"\$(jq -r .phase '${ROOT}/state/refresh-status.json')\" = error ]"
+check "export missing zip: says export"      bash -c "jq -r .message '${ROOT}/state/refresh-status.json' | grep -qi 'export'"
+
+# ---- 4e. neither inbox/ nor donations/: plain-language error --------------------
+rm -rf "${FAKE_REMOTE}/coll/donations"
+touch "${ROOT}/state/refresh-requested"
+"${TMP}/ddp-refresh.sh" || true
+check "no donations folder: phase error"     bash -c "[ \"\$(jq -r .phase '${ROOT}/state/refresh-status.json')\" = error ]"
+check "no donations folder: says folder path" bash -c "jq -r .message '${ROOT}/state/refresh-status.json' | grep -qi 'folder path'"
+
 # ---- 5. rd-link happy path -----------------------------------------------------
 cat > "${ROOT}/config/instance.json" <<'J'
 {"study_name":"insta","source_mode":"rd-link","local_path":null,"cadence":"off","default_n":15}
