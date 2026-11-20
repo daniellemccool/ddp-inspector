@@ -47,7 +47,7 @@ if ($storageMode) { csrf_token(); }
 
   <section class="step">
   <h2>2 · About your study</h2>
-  <form method="post">
+  <form method="post" enctype="multipart/form-data">
     <?= csrf_field() ?><input type="hidden" name="action" value="save_source">
     <label class="field">Study name
       <input name="study_name" value="<?= h((string)($inst['study_name'] ?? '')) ?>"></label>
@@ -66,9 +66,12 @@ if ($storageMode) { csrf_token(); }
       <label class="choice-head"><input type="radio" name="source_mode" value="yoda" <?= ($inst['source_mode'] ?? '') === 'yoda' ? 'checked' : '' ?>>
         Yoda</label>
       <div class="choice-body">
-        Your data manager gives you a folder path and an access code — paste both here.
-        <label class="field">Folder path <input name="collection" value="<?= h((string)(inst_source_load()['collection'] ?? '')) ?>"></label>
-        <label class="field">Access code <input type="password" name="access_code" <?= inst_source_exists() ? 'placeholder="saved ✓"' : '' ?>></label>
+<?php $ysrc = inst_source_load() ?? []; $yoda = ($ysrc['mode'] ?? '') === 'yoda'; ?>
+        Log in with your own Yoda account. In the Yoda portal's data transfer instructions, download the configuration (JSON or YAML) and upload it below, or copy the block and paste it, and create a data access password there too — it is not your UU password, and it expires.
+        <label class="field">Folder path <input name="collection" placeholder="/nluu10p/home/research-…" value="<?= h((string)($ysrc['collection'] ?? '')) ?>"></label>
+        <label class="field">Yoda configuration file <input type="file" name="irods_config_file" accept=".json,.yml,.yaml"></label>
+        <label class="field">…or paste the configuration <textarea name="irods_config" rows="8" spellcheck="false" placeholder="{ &quot;irods_host&quot;: …, &quot;irods_user_name&quot;: … }"><?= $yoda && is_array($ysrc['env'] ?? null) ? h((string)json_encode($ysrc['env'], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)) : '' ?></textarea></label>
+        <label class="field">Data access password <input type="password" name="yoda_password" autocomplete="off" <?= $yoda && (string)($ysrc['password'] ?? '') !== '' ? 'placeholder="saved ✓"' : '' ?>></label>
       </div>
     </div>
     <div class="choice">

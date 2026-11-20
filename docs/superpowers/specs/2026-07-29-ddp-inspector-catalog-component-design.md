@@ -1,5 +1,12 @@
 # DDP Inspector — SRC catalog component (design)
 
+> **Correction 2026-11-20 — Yoda access (D9, §"Source modes", wizard step):**
+> Yoda has no anonymous login, so the "anonymous read ticket / verified live
+> 2026-07-13 / no account, no DAP" premise below is false and never worked.
+> Yoda mode now logs in as the researcher: their Yoda configuration
+> (uploaded or pasted from the Yoda portal, JSON or GoCommands YAML) plus a
+> data access password. See `provisioning/docs/OPERATIONS.md` §4.
+
 **Date:** 2026-07-29
 **Status:** approved in brainstorm; supersedes the single-study framing of
 `deploy/HANDOFF-researchcloud-ddp-transcribe.md` (decision (a) co-locate was

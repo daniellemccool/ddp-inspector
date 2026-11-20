@@ -72,50 +72,53 @@ echo "[refresh] $(date -u +%FT%TZ) mode=${MODE} requested=${REQUESTED} cadence=$
 
 case "${MODE}" in
   yoda)
-    [ -f "${SOURCE}" ] || die "The data connection is not set up yet — open Setup and enter your access code."
-    COLLECTION="$(jq -r '.collection' "${SOURCE}")"
-    HOST="$(jq -r '.host' "${SOURCE}")"
-    ZONE="$(jq -r '.zone' "${SOURCE}")"
-    TICKET="$(jq -r '.ticket' "${SOURCE}")"
-    # Credential-free anonymous env (verified 2026-07-13): native scheme +
-    # anonymous user + read ticket via -T. Private per-run config dir.
+    [ -f "${SOURCE}" ] || die "The data connection is not set up yet — open Setup and enter your Yoda login."
+    COLLECTION="$(jq -r '.collection // ""' "${SOURCE}")"
+    YODA_PASSWORD="$(jq -r '.password // ""' "${SOURCE}")"
+    # A source.json from the old anonymous-ticket design has no configuration
+    # or password (Yoda has no anonymous login; that design never worked).
+    jq -e '.env | type == "object"' "${SOURCE}" >/dev/null 2>&1 && [ -n "${YODA_PASSWORD}" ] \
+      || die "Yoda needs your own login — open Setup, add your Yoda configuration (upload or paste) and data access password, and save."
+    # The researcher's own configuration as pasted from the Yoda portal,
+    # written out unchanged into a private per-run config dir. The data
+    # access password never goes into a file or argv: gocmd v0.12.2 reads
+    # IRODS_USER_PASSWORD instead of prompting. Keep in sync with
+    # inst_gocmd_config() and ddp-probe.sh.j2.
     GDIR="$(mktemp -d)"; trap 'rm -rf "${GDIR}"' EXIT
-    cat > "${GDIR}/irods_environment.json" <<EOF
-{
-  "irods_host": "${HOST}",
-  "irods_port": 1247,
-  "irods_zone_name": "${ZONE}",
-  "irods_client_zone_name": "${ZONE}",
-  "irods_user_name": "anonymous",
-  "irods_client_user_name": "anonymous",
-  "irods_authentication_scheme": "native",
-  "irods_default_hash_scheme": "SHA256",
-  "irods_client_server_policy": "CS_NEG_REQUIRE",
-  "irods_client_server_negotiation": "request_server_negotiation",
-  "irods_ssl_verify_server": "hostname"
-}
-EOF
+    jq '.env' "${SOURCE}" > "${GDIR}/irods_environment.json"
+    gc() { # gc <subcommand> <args…>: gocmd logged in as this study's Yoda user
+      local sub="$1"; shift
+      IRODS_USER_PASSWORD="${YODA_PASSWORD}" "${GOCMD}" "${sub}" -c "${GDIR}" "$@"
+    }
     write_status probing - - "Checking the connection to the data store…"
-    "${GOCMD}" ls -c "${GDIR}" -T "${TICKET}" "i:${COLLECTION}" >/dev/null \
-      || die "Could not reach the donation data. The access code may have expired or been revoked — ask your data manager for a new one, paste it in Setup, and try again."
+    if ! PROBE_OUT="$(gc ls "i:${COLLECTION}" 2>&1)"; then
+      echo "${PROBE_OUT}"
+      if grep -qi 'authentication failed' <<<"${PROBE_OUT}"; then
+        die "Yoda did not accept your username and data access password. Data access passwords expire — create a new one in the Yoda portal, paste it in Setup, and try again."
+      elif grep -qi 'failed to establish a connection' <<<"${PROBE_OUT}"; then
+        die "Could not reach Yoda from this workspace. This is usually temporary — try again in a few minutes."
+      else
+        die "Logged in to Yoda, but could not open the folder. Check the folder path in Setup — it is the full path, starting with /nluu10p/home/."
+      fi
+    fi
     write_status pulling - - "Fetching donations…"
     ensure_real_inbox_dir
-    # get -f, not sync: gocmd v0.12.2's sync subcommand rejects -T
-    # ("unknown shorthand flag") — only ls/get accept tickets (live finding
-    # 2026-07-30, matching the 2026-07-13 ls/get verification). get -f
-    # re-downloads instead of delta-syncing; acceptable at donation scale.
-    if "${GOCMD}" ls -c "${GDIR}" -T "${TICKET}" "i:${COLLECTION}/inbox" >/dev/null 2>&1; then
+    # get -f, not sync: in the old ticket design gocmd v0.12.2's sync
+    # rejected -T (live finding 2026-07-30). sync with a pam_password login
+    # is not verified live yet, so keep get -f: it re-downloads instead of
+    # delta-syncing; acceptable at donation scale.
+    if gc ls "i:${COLLECTION}/inbox" >/dev/null 2>&1; then
       # Loose donation files in <collection>/inbox (the original layout).
-      "${GOCMD}" get -c "${GDIR}" -T "${TICKET}" -f "i:${COLLECTION}/inbox" "${ROOT}/data" \
+      gc get -f "i:${COLLECTION}/inbox" "${ROOT}/data" \
         || die "Fetching donations stopped partway. This is usually temporary — try again in a few minutes."
-    elif "${GOCMD}" ls -c "${GDIR}" -T "${TICKET}" "i:${COLLECTION}/donations" >/dev/null 2>&1; then
+    elif gc ls "i:${COLLECTION}/donations" >/dev/null 2>&1; then
       # Next export zips in <collection>/donations/<YYYYMMDD>_<study>.zip.
       # Each export is a full snapshot, so the newest one IS the study's
       # current state: extract only its donation files (…_source=…), not
       # onboarding answers or Next preview-mode test donations, and mirror
       # them into the inbox so a withdrawn donation disappears as well.
       rm -rf "${CACHE}/donations"
-      "${GOCMD}" get -c "${GDIR}" -T "${TICKET}" -f "i:${COLLECTION}/donations" "${CACHE}" \
+      gc get -f "i:${COLLECTION}/donations" "${CACHE}" \
         || die "Fetching donations stopped partway. This is usually temporary — try again in a few minutes."
       ZIP="$(find "${CACHE}/donations" -maxdepth 1 -type f -name '*.zip' 2>/dev/null | sort | tail -n 1)"
       [ -n "${ZIP}" ] \
@@ -154,13 +157,13 @@ PY
     # Transcripts: prefer a server-side extracted tree if it ever appears
     # (FSW-unblock optimization); otherwise pull shard tars and extract
     # locally (the required path while server-side extraction is blocked).
-    if "${GOCMD}" ls -c "${GDIR}" -T "${TICKET}" "i:${COLLECTION}/transcripts" >/dev/null 2>&1; then
+    if gc ls "i:${COLLECTION}/transcripts" >/dev/null 2>&1; then
       write_status pulling - - "Fetching transcripts…"
-      "${GOCMD}" get -c "${GDIR}" -T "${TICKET}" -f "i:${COLLECTION}/transcripts" "${ROOT}/data/analyses" \
+      gc get -f "i:${COLLECTION}/transcripts" "${ROOT}/data/analyses" \
         || die "Fetching transcripts stopped partway. Try again in a few minutes."
-    elif "${GOCMD}" ls -c "${GDIR}" -T "${TICKET}" "i:${COLLECTION}/transcripts-tars" >/dev/null 2>&1; then
+    elif gc ls "i:${COLLECTION}/transcripts-tars" >/dev/null 2>&1; then
       write_status pulling - - "Fetching transcript bundles…"
-      "${GOCMD}" get -c "${GDIR}" -T "${TICKET}" -f "i:${COLLECTION}/transcripts-tars" "${CACHE}" \
+      gc get -f "i:${COLLECTION}/transcripts-tars" "${CACHE}" \
         || die "Fetching transcript bundles stopped partway. Try again in a few minutes."
       write_status extracting - - "Unpacking transcripts…"
       mkdir -p "${TRANSCRIPTS}"

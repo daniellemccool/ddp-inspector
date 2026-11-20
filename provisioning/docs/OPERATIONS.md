@@ -1,6 +1,6 @@
 # DDP Inspector — operator runbook
 
-Everything in this file is OPERATOR territory (SRC portal, SSH, tickets).
+Everything in this file is OPERATOR territory (SRC portal, SSH, Yoda logins).
 Researchers never need any of it: their surface is the web UI. Snag numbers
 (S7, S8, …) refer to the transcribe repo's
 `d3i-infra/researchcloud-ddp-transcribe/docs/catalog-item.md` §5.
@@ -79,27 +79,32 @@ volumes) — necessary because provisioning runs as the cloud user before any
 SRAM user's `~/data` symlink exists (live finding 2026-07-30); the home
 data-dir scan remains as a fallback for shared-mount shapes.
 
-## 4. Yoda read tickets (the "access code")
+## 4. Yoda login (researcher's own account)
 
-Minted by the data manager on a machine with an authenticated gocmd
-(e.g. the pipeline workspace or an operator laptop after `gocmd init`):
+**Correction (2026-11-20):** Yoda has no anonymous login and never had.
+The original design (anonymous user + read ticket, "verified 2026-07-13")
+never worked: a live attempt fails with `Authentication failed (auth
+scheme: "native", username: "anonymous")`. Yoda mode now logs in as the
+researcher, who must be a member of the study's Yoda group.
 
-    gocmd mkticket -t read /nluu10p/home/<collection>     # mint
-    gocmd modticket <ticket> --expiry 2026-09-01          # MANDATORY on real hand-offs
-    gocmd lsticket                                        # audit
-    gocmd rmticket <ticket>                               # revoke
+The researcher supplies three things in Setup:
 
-Defaults are permissive (unlimited uses, NO expiry) — never hand off a
-ticket without `modticket` an expiry. Hand the researcher ONLY the ticket
-string + collection path; they paste both into the app's Setup. Rotation =
-mint new, paste new, `rmticket` old. The workspace never holds a Yoda
-account, DAP, or CO membership (anonymous ticket access, verified
-2026-07-13).
+1. **Their Yoda configuration**, from the Yoda portal's data transfer
+   instructions: "Download as JSON" (iCommands/iBridges
+   `irods_environment.json`) or "Download as YAML" (GoCommands
+   `config.yml`), uploaded, or the block pasted. It is stored unchanged
+   (`irods_*` keys only, password keys dropped) as `source.json`'s `env`
+   and written out as gocmd's `irods_environment.json`. No defaults: each
+   Yoda instance publishes its own host, zone and auth settings (the
+   crime study's is `lp0555.its.uu.nl`, `pam_password`).
+2. **A data access password (DAP)** created in the Yoda portal (not the
+   UU password; DAPs expire). Stored in `source.json` (0600, service user)
+   and handed to gocmd only via `IRODS_USER_PASSWORD`, never in a file or
+   argv. Rotation = create a new DAP, paste it in Setup.
+3. **The folder path**: the full iRODS path, zone and home included
+   (`/nluu10p/home/research-tiktok-crime-policing`).
 
-The collection path is the FULL iRODS path, zone and home included
-(`/nluu10p/home/research-tiktok-crime-policing`): the anonymous ticket
-environment has no `irods_home` to resolve a relative path against.
-What the refresh reads under it:
+What the refresh reads under the folder:
 
     inbox/*.json                     loose donation files (original layout), or
     donations/<YYYYMMDD>_<study>.zip Next exports; the newest zip wins and the

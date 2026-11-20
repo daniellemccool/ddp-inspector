@@ -121,6 +121,10 @@ button:hover { border-color:var(--accent); background:var(--accent-wash); }
                font:400 .9rem var(--sans); color:var(--ink); background:#fff;
                border:1px solid var(--rule); border-radius:5px; }
 .field input:focus { border-color:var(--accent); }
+.field textarea { display:block; width:100%; max-width:36rem; margin-top:.22rem; padding:.42rem .6rem;
+                  font:400 .78rem/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; color:var(--ink);
+                  background:#fff; border:1px solid var(--rule); border-radius:5px; resize:vertical; }
+.field textarea:focus { border-color:var(--accent); outline:none; }
 .toolbar { display:flex; align-items:center; gap:1rem; margin:.5rem 0 .9rem; flex-wrap:wrap; }
 .toolbar form { margin:0; }
 input[type=radio], input[type=checkbox] { accent-color:var(--accent); }

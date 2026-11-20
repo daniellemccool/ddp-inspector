@@ -24,10 +24,10 @@ eq(inst_save($inst), true, 'instance saved');
 eq(inst_configured(), true, 'instance.json -> configured');
 eq(inst_load()['study_name'], 'Pilot', 'instance round-trips');
 
-$src = ['mode' => 'yoda', 'collection' => '/nluu10p/home/x', 'host' => 'fsw.data.uu.nl',
-        'zone' => 'nluu10p', 'ticket' => 'SECRET'];
+$src = ['mode' => 'yoda', 'collection' => '/nluu10p/home/x',
+        'env' => ['irods_host' => 'yoda.example', 'irods_port' => 1247, 'irods_zone_name' => 'nluu10p', 'irods_user_name' => 'r@uu.nl', 'irods_authentication_scheme' => 'pam_password'], 'password' => 'SECRET'];
 eq(inst_source_save($src), true, 'source saved');
-eq(inst_source_load()['ticket'], 'SECRET', 'source round-trips');
+eq(inst_source_load()['password'], 'SECRET', 'source round-trips');
 eq(substr(sprintf('%o', fileperms("$scratch/config/source.json")), -3), '600', 'source.json is 0600');
 check(!file_exists("$scratch/config/source.json.tmp"), 'atomic write leaves no temp file');
 
@@ -72,32 +72,72 @@ $GLOBALS['__cfg']['gocmd_bin'] = '/nonexistent/gocmd-binary';
 inst_save(['study_name' => 'Pilot', 'source_mode' => 'yoda', 'local_path' => null,
            'cadence' => 'off', 'default_n' => 15]);
 inst_source_save(['mode' => 'yoda', 'collection' => '/nluu10p/home/x',
-                  'host' => 'fsw.data.uu.nl', 'zone' => 'nluu10p', 'ticket' => 'T']);
+                  'env' => ['irods_host' => 'yoda.example', 'irods_port' => 1247, 'irods_zone_name' => 'nluu10p', 'irods_user_name' => 'r@uu.nl', 'irods_authentication_scheme' => 'pam_password'], 'password' => 'DAP-T']);
 $probe = inst_probe();
 eq($probe['ok'], false, 'missing binary -> not ok');
 check(str_contains($probe['message'], 'unavailable'), 'missing binary -> unavailable message');
 
-// yoda probe uses the live-verified gocmd form: -c <dir with env json>, -T ticket, i: prefix
+// yoda probe: -c <dir with the pasted env json>, i: prefix, password ONLY
+// via IRODS_USER_PASSWORD (never argv, never the config file), no ticket.
 $fakeg = "$scratch/fake-gocmd";
 $glog = "$scratch/gocmd-args.log";
 $gcopy = "$scratch/gocmd-env-copy.json";
-file_put_contents($fakeg,
-    "#!/bin/sh\nprintf '%s' \"\$*\" > " . escapeshellarg($glog) . "\n"
-    . "[ \"\$1\" = -c ] || exit 3\n"
-    . "[ -f \"\$2/irods_environment.json\" ] || exit 4\n"
-    . "cp \"\$2/irods_environment.json\" " . escapeshellarg($gcopy) . "\nexit 0\n");
+$gpw = "$scratch/gocmd-password.txt";
+$fakeBody = function (string $exitWith, string $say): string use ($glog, $gcopy, $gpw) {
+    return "#!/bin/sh\nprintf '%s' \"\$*\" > " . escapeshellarg($glog) . "\n"
+        . "printf '%s' \"\$IRODS_USER_PASSWORD\" > " . escapeshellarg($gpw) . "\n"
+        . "[ \"\$1\" = -c ] || exit 3\n"
+        . "[ -f \"\$2/irods_environment.json\" ] || exit 4\n"
+        . "cp \"\$2/irods_environment.json\" " . escapeshellarg($gcopy) . "\n"
+        . ($say === '' ? '' : "echo " . escapeshellarg($say) . " >&2\n")
+        . "exit $exitWith\n";
+};
+file_put_contents($fakeg, $fakeBody('0', ''));
 chmod($fakeg, 0755);
 $GLOBALS['__cfg']['gocmd_bin'] = $fakeg;
 $probe = inst_probe();
-eq($probe['ok'], true, 'yoda probe ok via verified invocation form');
+eq($probe['ok'], true, 'yoda probe ok via config dir + env password');
 $gargs = (string)file_get_contents($glog);
-check(str_contains($gargs, '-T T'), 'yoda probe passes the ticket via -T');
 check(str_contains($gargs, 'ls i:/nluu10p/home/x'), 'yoda probe lists the i:-prefixed collection');
+check(!str_contains($gargs, '-T'), 'yoda probe passes no ticket');
+check(!str_contains($gargs, 'DAP-T'), 'password never in argv');
+eq((string)file_get_contents($gpw), 'DAP-T', 'password reaches gocmd via IRODS_USER_PASSWORD');
 $genv = json_decode((string)file_get_contents($gcopy), true);
-eq($genv['irods_user_name'] ?? null, 'anonymous', 'env json: anonymous user');
-eq($genv['irods_client_zone_name'] ?? null, 'nluu10p', 'env json: client zone set');
-eq($genv['irods_authentication_scheme'] ?? null, 'native', 'env json: native auth scheme');
-check(!isset($genv['irods_ticket']), 'env json carries no ticket (goes via -T)');
+eq($genv['irods_host'] ?? null, 'yoda.example', 'env json: host as pasted (no default)');
+eq($genv['irods_user_name'] ?? null, 'r@uu.nl', 'env json: user as pasted');
+eq($genv['irods_authentication_scheme'] ?? null, 'pam_password', 'env json: auth scheme as pasted');
+check(!str_contains((string)file_get_contents($gcopy), 'DAP-T'), 'password never in the config file');
+
+// rejected login -> plain message naming the data access password
+file_put_contents($fakeg, $fakeBody('1', 'Authentication failed (auth scheme: "pam_password")!'));
+$probe = inst_probe();
+eq($probe['ok'], false, 'rejected login -> not ok');
+check(str_contains($probe['message'], 'data access password'), 'rejected login -> DAP guidance');
+
+// logged in but the folder will not open -> folder-path guidance
+file_put_contents($fakeg, $fakeBody('1', 'no such collection'));
+$probe = inst_probe();
+check(str_contains($probe['message'], 'folder path'), 'unopenable folder -> folder-path guidance');
+
+// a source.json from the old ticket design -> asks for the configuration
+inst_source_save(['mode' => 'yoda', 'collection' => '/nluu10p/home/x',
+                  'host' => 'fsw.data.uu.nl', 'zone' => 'nluu10p', 'ticket' => 'T']);
+$probe = inst_probe();
+eq($probe['ok'], false, 'legacy ticket source -> not ok');
+check(str_contains($probe['message'], 'Yoda configuration'), 'legacy ticket source -> asks for the configuration');
+
+// Pasted configuration parsing: JSON and GoCommands YAML, password keys dropped.
+[$e, $err] = inst_parse_irods_env('{"irods_host": "h", "irods_port": 1247, "irods_zone_name": "z", "irods_user_name": "u@uu.nl", "irods_authentication_scheme": "pam_password", "irods_user_password": "leak", "other": 1}');
+eq($e['irods_port'] ?? null, 1247, 'json config parsed');
+check(!isset($e['irods_user_password']), 'json config: password key dropped');
+check(!isset($e['other']), 'json config: non-irods keys dropped');
+[$e, $err] = inst_parse_irods_env("irods_host: \"h\"\nirods_port: 1247\nirods_zone_name: \"z\"\nirods_user_name: \"u@uu.nl\"\nirods_authentication_scheme: \"pam_password\"\nirods_encryption_key_size: 32\n");
+eq($e['irods_host'] ?? null, 'h', 'yaml config: quoted string unquoted');
+eq($e['irods_port'] ?? null, 1247, 'yaml config: port becomes int');
+eq($e['irods_encryption_key_size'] ?? null, 32, 'yaml config: key size becomes int');
+[$e, $err] = inst_parse_irods_env('{"irods_host": "h"}');
+eq($e, null, 'incomplete config rejected');
+check(str_contains($err, 'irods_port'), 'incomplete config names the missing key');
 
 // rd-link probe: modern endpoint fails -> legacy fallback succeeds -> source.json rewritten
 $fake = "$scratch/fake-rclone";

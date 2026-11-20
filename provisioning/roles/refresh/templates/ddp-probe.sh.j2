@@ -13,29 +13,18 @@ INSTANCE="${ROOT}/config/instance.json"
 
 case "${1:-}" in
   yoda)
-    [ -f "${SOURCE}" ] || { echo "No access code saved yet."; exit 1; }
+    [ -f "${SOURCE}" ] || { echo "No Yoda login saved yet."; exit 1; }
+    PW="$(jq -r '.password // ""' "${SOURCE}")"
+    jq -e '.env | type == "object"' "${SOURCE}" >/dev/null 2>&1 && [ -n "${PW}" ] \
+      || { echo "Add your Yoda configuration and data access password in Setup."; exit 1; }
     GDIR="$(mktemp -d)"; trap 'rm -rf "${GDIR}"' EXIT
-    HOST="$(jq -r '.host' "${SOURCE}")"; ZONE="$(jq -r '.zone' "${SOURCE}")"
-    cat > "${GDIR}/irods_environment.json" <<EOF
-{
-  "irods_host": "${HOST}",
-  "irods_port": 1247,
-  "irods_zone_name": "${ZONE}",
-  "irods_client_zone_name": "${ZONE}",
-  "irods_user_name": "anonymous",
-  "irods_client_user_name": "anonymous",
-  "irods_authentication_scheme": "native",
-  "irods_default_hash_scheme": "SHA256",
-  "irods_client_server_policy": "CS_NEG_REQUIRE",
-  "irods_client_server_negotiation": "request_server_negotiation",
-  "irods_ssl_verify_server": "hostname"
-}
-EOF
-    if "${GOCMD}" ls -c "${GDIR}" -T "$(jq -r '.ticket' "${SOURCE}")" \
+    # Same config as ddp-refresh.sh.j2 / inst_gocmd_config(); password via env.
+    jq '.env' "${SOURCE}" > "${GDIR}/irods_environment.json"
+    if IRODS_USER_PASSWORD="${PW}" "${GOCMD}" ls -c "${GDIR}" \
          "i:$(jq -r '.collection' "${SOURCE}")" >/dev/null 2>&1; then
       echo "Connected."
     else
-      echo "Could not connect — the access code may have expired or been revoked. Ask your data manager for a new one."
+      echo "Could not connect — check the folder path, and your data access password may have expired. Create a new one in the Yoda portal."
       exit 1
     fi
     ;;
