@@ -1,7 +1,7 @@
 # DDP Inspector: read studies from the pipeline's analysis database (design)
 
 **Date:** 2026-11-20
-**Status:** draft for review (builder check done 2026-11-20)
+**Status:** approved 2026-11-20 (builder check done)
 **Builds on:** `2026-07-29-ddp-inspector-catalog-component-design.md` (the
 SRC component, Setup wizard, refresh machinery) and the Yoda login rework
 (`provisioning/docs/OPERATIONS.md` §4).
