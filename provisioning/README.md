@@ -9,7 +9,7 @@ Operations: `docs/OPERATIONS.md`.
 
     deploy-ddp-inspector.yaml   entry play (SRC component Path points here)
     roles/preflight             volume auto-detect (fstype-filtered) + asserts
-    roles/inspector             php-fpm, app install, nginx location, volume tree
+    roles/inspector             php-fpm, app install, nginx location + restart drop-in, volume tree
     roles/refresh               gocmd/rclone, refresh+probe scripts, systemd units
     scripts/                    hermetic test harnesses (see below)
     docs/OPERATIONS.md          operator runbook

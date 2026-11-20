@@ -79,3 +79,20 @@
   notify:
     - Validate nginx config
     - Reload nginx service
+
+- name: Ensure the nginx systemd drop-in directory exists
+  ansible.builtin.file:
+    path: /etc/systemd/system/nginx.service.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Make nginx retry failed starts (SRC-Nginx upstream DNS lookup)
+  ansible.builtin.template:
+    src: nginx-restart.conf.j2
+    dest: /etc/systemd/system/nginx.service.d/ddp-inspector-restart.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload systemd units
