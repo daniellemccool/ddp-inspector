@@ -126,28 +126,20 @@ case "${MODE}" in
       write_status extracting - - "Unpacking donations…"
       STAGE="${ROOT}/data/.inbox-staging"
       rm -rf "${STAGE}"; mkdir -p "${STAGE}"
-      # Python, not unzip: Next's export zips store no permission bits
-      # (unzip creates mode-000 files nobody can read) and trip unzip 6.0's
-      # overlapped-components "zip bomb" check (live finding 2026-11-20 on
-      # a real Next export; zipfile.testzip() finds every entry intact).
-      # Basename only: flattens the study folder and rules out path traversal.
-      python3 -I - "${ZIP}" "${STAGE}" <<'PY' \
+      # Next's export zips trip unzip 6.0's overlapped-components "zip bomb"
+      # check although every entry is intact (live finding 2026-11-20 on a
+      # real Next export), so that check is off: the zip is the study's own
+      # export from its data manager, not an untrusted upload. They also
+      # store no permission bits (unzip writes mode-000 files nobody can
+      # read), hence the chmod. -j flattens the study folder and rules out
+      # path traversal; exit 11 = no matching entries (no donations yet).
+      UNZIP_DISABLE_ZIPBOMB_DETECTION=TRUE \
+        unzip -q -j -o "${ZIP}" '*_source=*.json' -x '*_participant=preview_*' -d "${STAGE}"
+      rc=$?
+      [ "${rc}" -eq 0 ] || [ "${rc}" -eq 11 ] \
         || die "Unpacking donations failed. Try refreshing again."
-import fnmatch, os, shutil, sys, zipfile
-src, out = sys.argv[1], sys.argv[2]
-n = 0
-with zipfile.ZipFile(src) as z:
-    for info in z.infolist():
-        name = os.path.basename(info.filename)
-        if info.is_dir() or not fnmatch.fnmatchcase(name, "*_source=*.json"):
-            continue
-        if "_participant=preview_" in name:
-            continue
-        with z.open(info) as r, open(os.path.join(out, name), "wb") as w:
-            shutil.copyfileobj(r, w)
-        n += 1
-print(f"[refresh] extracted {n} donation file(s) from {os.path.basename(src)}")
-PY
+      find "${STAGE}" -maxdepth 1 -type f -name '*.json' -exec chmod 0644 {} +
+      echo "[refresh] extracted $(find "${STAGE}" -maxdepth 1 -type f -name '*.json' | wc -l | tr -d ' ') donation file(s) from $(basename "${ZIP}")"
       find "${INBOX}" -maxdepth 1 -type f -name '*.json' -delete
       find "${STAGE}" -maxdepth 1 -type f -name '*.json' -exec mv -t "${INBOX}" {} +
       rm -rf "${STAGE}" "${CACHE}/donations"

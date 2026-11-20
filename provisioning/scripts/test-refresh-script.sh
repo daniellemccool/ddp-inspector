@@ -24,6 +24,7 @@ export FAKE_GOCMD_LOG="${TMP}/gocmd.log"; : > "${FAKE_GOCMD_LOG}"
 export FAKE_RCLONE_LOG="${TMP}/rclone.log"; : > "${FAKE_RCLONE_LOG}"
 export FAKE_RD="${TMP}/rd"; mkdir -p "${FAKE_RD}"
 
+# Needs: jq, zip, unzip, bsdtar (libarchive) on the test machine.
 # fake gocmd: minimal ls/sync/get subset that logs in like Yoda — the data
 # access password must arrive via IRODS_USER_PASSWORD (else "Authentication
 # failed", like the real server); a ticket (-T) is a hard error. It copies the
@@ -187,17 +188,13 @@ check "export: no staging dir left behind"   bash -c "! test -e '${ROOT}/data/.i
 check "export: donation readable"            test -r "${ROOT}/data/inbox/${DON}"
 
 # ---- 4b'. Next's real export quirk: entries carry NO permission bits ------------
-# (zipinfo shows ?---------; unzip would write mode-000 files). Rewrite the
-# fake export with zeroed external attributes and require readable output.
-python3 -I - "${FAKE_REMOTE}/coll/donations/20260728_study.zip" <<'PY'
-import sys, zipfile
-p = sys.argv[1]
-items = [(i, zipfile.ZipFile(p).read(i.filename)) for i in zipfile.ZipFile(p).infolist()]
-with zipfile.ZipFile(p, "w", zipfile.ZIP_DEFLATED) as z:
-    for i, data in items:
-        i.external_attr = 0
-        z.writestr(i, data)
-PY
+# (zipinfo shows ?---------; unzip writes mode-000 files). Rebuild the fake
+# export with mode-0000 entries (bsdtar + an mtree spec sets the stored mode
+# exactly) and require readable output.
+printf '#mtree\n./20260728_study/%s type=file mode=0000 contents=%s\n' \
+  "${DON}" "${TMP}/zx/new/20260728_study/${DON}" \
+  | bsdtar --format zip -cf "${FAKE_REMOTE}/coll/donations/20260728_study.zip" @-
+check "export no-perm zip: entry stored mode 0000" bash -c "zipinfo '${FAKE_REMOTE}/coll/donations/20260728_study.zip' | grep -q '^-\\{10\\} '"
 rm -f "${ROOT}/data/inbox"/*.json
 touch "${ROOT}/state/refresh-requested"
 check "export no-perm zip: run succeeds"     "${TMP}/ddp-refresh.sh"
