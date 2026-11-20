@@ -24,12 +24,57 @@ eq($r['flash'][0]['kind'], 'ok', 'yoda source saved');
 eq(inst_load()['source_mode'], 'yoda', 'instance saved');
 eq(inst_source_load()['ticket'], 'TICKET123', 'ticket stored');
 
+// Re-saving "About your study" (e.g. a new study name) with the access-code
+// field left blank keeps the saved ticket — the field shows "saved ✓".
+$r = inst_handle_setup_post(['action' => 'save_source', 'csrf' => csrf_token(),
+    'source_mode' => 'yoda', 'study_name' => 'Crime study (renamed)',
+    'collection' => '/nluu10p/home/research-x', 'access_code' => ''], []);
+eq($r['flash'][0]['kind'], 'ok', 'yoda re-save with blank access code accepted');
+eq(inst_load()['study_name'], 'Crime study (renamed)', 'study name updated on re-save');
+eq(inst_source_load()['ticket'], 'TICKET123', 'blank access code keeps the saved ticket');
+
+// A corrected folder path keeps the ticket too (a collection ticket covers
+// its sub-collections; Check & fetch catches a ticket that does not fit).
+$r = inst_handle_setup_post(['action' => 'save_source', 'csrf' => csrf_token(),
+    'source_mode' => 'yoda', 'study_name' => 'Crime study (renamed)',
+    'collection' => '/nluu10p/home/research-x/sub', 'access_code' => ''], []);
+eq($r['flash'][0]['kind'], 'ok', 'yoda path change with blank access code accepted');
+eq(inst_source_load()['collection'], '/nluu10p/home/research-x/sub', 'collection updated');
+eq(inst_source_load()['ticket'], 'TICKET123', 'path change keeps the saved ticket');
+
+// A typed access code still replaces the saved one.
+$r = inst_handle_setup_post(['action' => 'save_source', 'csrf' => csrf_token(),
+    'source_mode' => 'yoda', 'study_name' => 'Crime study',
+    'collection' => '/nluu10p/home/research-x', 'access_code' => 'TICKET456'], []);
+eq(inst_source_load()['ticket'], 'TICKET456', 'new access code replaces the saved ticket');
+
 $r = inst_handle_setup_post(['action' => 'save_source', 'csrf' => csrf_token(),
     'source_mode' => 'rd-link', 'study_name' => 'RD study',
     'share_link' => 'https://researchdrive.surf.nl/index.php/s/AbCdEf123', 'link_password' => 'pw'], []);
 eq(inst_source_load()['share_token'], 'AbCdEf123', 'share token from link');
 eq(inst_source_load()['webdav_url'], 'https://researchdrive.surf.nl/public.php/dav/files/AbCdEf123/', 'webdav url derived (modern form)');
 check(inst_source_exists(), 'rd-link source.json exists before switching to local mode');
+
+// Same share link, blank password: keep the saved password.
+$r = inst_handle_setup_post(['action' => 'save_source', 'csrf' => csrf_token(),
+    'source_mode' => 'rd-link', 'study_name' => 'RD study (renamed)',
+    'share_link' => 'https://researchdrive.surf.nl/index.php/s/AbCdEf123', 'link_password' => ''], []);
+eq($r['flash'][0]['kind'], 'ok', 'rd-link re-save with blank password accepted');
+eq(inst_source_load()['password'], 'pw', 'blank password keeps the saved password');
+
+// A DIFFERENT share link needs its own password: never carry one over.
+$r = inst_handle_setup_post(['action' => 'save_source', 'csrf' => csrf_token(),
+    'source_mode' => 'rd-link', 'study_name' => 'RD study',
+    'share_link' => 'https://researchdrive.surf.nl/index.php/s/OtherLink9', 'link_password' => ''], []);
+eq($r['flash'][0]['kind'], 'error', 'new share link with blank password rejected');
+eq(inst_source_load()['share_token'], 'AbCdEf123', 'rejected save leaves the saved link alone');
+
+// Switching rd-link -> yoda with a blank access code: nothing to keep.
+$r = inst_handle_setup_post(['action' => 'save_source', 'csrf' => csrf_token(),
+    'source_mode' => 'yoda', 'study_name' => 'RD study',
+    'collection' => '/nluu10p/home/research-x', 'access_code' => ''], []);
+eq($r['flash'][0]['kind'], 'error', 'switch to yoda with blank access code rejected');
+eq(inst_source_load()['mode'], 'rd-link', 'rejected switch leaves the saved source alone');
 
 $r = inst_handle_setup_post(['action' => 'save_source', 'csrf' => csrf_token(),
     'source_mode' => 'local', 'study_name' => 'Local study', 'local_path' => '/tmp/some-donations'], []);

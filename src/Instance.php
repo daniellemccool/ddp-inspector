@@ -278,9 +278,14 @@ function inst_handle_setup_post(array $post, array $files): array {
             'default_n'   => (int)($inst['default_n'] ?? cfg('default_n', 15)),
         ];
         if (isset($inst['analysis_dirs'])) { $instance['analysis_dirs'] = $inst['analysis_dirs']; }
+        // Secret fields are never echoed back (they show "saved ✓"), so a
+        // blank one on re-save means "keep what is saved" — as long as the
+        // saved secret belongs to the same source.
+        $saved = inst_source_load() ?? [];
         if ($mode === 'yoda') {
             $collection = trim((string)($post['collection'] ?? ''));
             $ticket = trim((string)($post['access_code'] ?? ''));
+            if ($ticket === '' && ($saved['mode'] ?? '') === 'yoda') { $ticket = (string)($saved['ticket'] ?? ''); }
             if ($collection === '' || $ticket === '') { return $flash('error', 'Please fill in both the folder path and the access code your data manager gave you.'); }
             if (!inst_source_save(['mode' => 'yoda', 'collection' => $collection,
                     'host' => trim((string)($post['host'] ?? '')) ?: 'fsw.data.uu.nl',
@@ -292,7 +297,11 @@ function inst_handle_setup_post(array $post, array $files): array {
             $pw = (string)($post['link_password'] ?? '');
             $parts = parse_url($link);
             $token = ($parts !== false && isset($parts['path'])) ? basename(rtrim($parts['path'], '/')) : '';
-            if ($link === '' || $pw === '' || $token === '' || !isset($parts['scheme'], $parts['host'])) {
+            if ($pw === '' && $token !== '' && ($saved['mode'] ?? '') === 'rd-link'
+                    && ($saved['share_token'] ?? '') === $token) {
+                $pw = (string)($saved['password'] ?? '');
+            }
+            if ($link === ''|| $pw === '' || $token === '' || !isset($parts['scheme'], $parts['host'])) {
                 return $flash('error', 'Please paste the full share link and its password.');
             }
             if (!inst_source_save(['mode' => 'rd-link',
