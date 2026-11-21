@@ -41,17 +41,8 @@ $seg_info = function (array $seg): array {
 };
 
 ?>
-<!doctype html>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>DDP Inspector — video <?= h($vid) ?></title>
-<link rel="stylesheet" href="<?= h(asset_url('assets/style.css')) ?>">
-<main class="wrap">
-  <header class="site">
-    <a class="wordmark" href="<?= h(url('index.php')) ?>">DDP Inspector</a>
-    <nav class="crumbs"><a href="<?= h(url('index.php')) ?>">← all participants</a></nav>
-  </header>
-  <h1>Video <span class="id"><?= h($vid) ?></span></h1>
+<?php page_top('video ' . $vid, 'participants'); ?>
+  <h1><span class="eyebrow">Video</span> <span class="id"><?= h($vid) ?></span></h1>
   <?php if ($notice !== null): ?>
     <p class="notice"><?= h($notice) ?></p>
   <?php elseif ($txt === null && $meta === null): ?>
@@ -66,55 +57,67 @@ $seg_info = function (array $seg): array {
       $srcUrl = (string)($meta['source_url'] ?? '');
       $srcOk = preg_match('~^https?://~', $srcUrl) === 1;
       $lang = lang_name(is_string($meta['language_detected'] ?? null) ? $meta['language_detected'] : null);
-      $byline = [];
-      if (($vm['uploader'] ?? '') !== '') { $byline[] = '<span class="handle">@' . h((string)$vm['uploader']) . '</span>'; }
-      if (($vm['video_created_at'] ?? '') !== '') { $byline[] = h('posted ' . fmt_date_iso((string)$vm['video_created_at'])); }
-      if ($lang !== null) { $byline[] = h($lang); }
-      $stats = [];
-      foreach ([['view_count', 'views'], ['like_count', 'likes'], ['comment_count', 'comments']] as [$k, $label]) {
+      // Label and value rows for the rail; the full count goes in a title attr.
+      $facts = [];
+      if (($vm['uploader'] ?? '') !== '') { $facts[] = ['Uploader', '<span class="handle">@' . h((string)$vm['uploader']) . '</span>']; }
+      if (($vm['video_created_at'] ?? '') !== '') { $facts[] = ['Posted', h(fmt_date_iso((string)$vm['video_created_at']))]; }
+      foreach ([['view_count', 'Views'], ['like_count', 'Likes'], ['comment_count', 'Comments']] as [$k, $label]) {
         if (is_numeric($vm[$k] ?? null)) {
-          $stats[] = '<span title="' . h(number_format((int)$vm[$k])) . '">' . h(fmt_compact((int)$vm[$k])) . ' ' . $label . '</span>';
+          $facts[] = [$label, '<span title="' . h(number_format((int)$vm[$k])) . '">' . h(fmt_compact((int)$vm[$k])) . '</span>'];
         }
       }
-    ?>
-    <?php if ($vm !== [] || $srcOk || $lang !== null): ?>
-      <section class="videometa">
-        <?php if (($vm['video_description'] ?? '') !== ''): ?>
-          <p class="eyebrow">video caption</p>
-          <?php // Hashtag muting runs on h()-escaped text: the (?<!&) guard keeps the
-                // pattern off the #039-style innards of entities h() just produced. ?>
-          <p class="desc"><?= preg_replace('/(?<!&)(#\w+)/u', '<span class="tag">$1</span>', h((string)$vm['video_description'])) ?></p>
-        <?php endif; ?>
-        <?php if ($byline !== []): ?><p class="byline"><?= implode(' · ', $byline) ?></p><?php endif; ?>
-        <?php if ($stats !== []): ?><p class="vstats"><?= implode(' · ', $stats) ?></p><?php endif; ?>
-        <p class="meta">
-          <?php if ($srcOk): ?><a href="<?= h($srcUrl) ?>" rel="noreferrer noopener" target="_blank">watch on TikTok ↗</a><?php endif; ?>
-          <?php if (($vm['metadata_fetched_at'] ?? '') !== ''): ?>
-            <?= $srcOk ? '·' : '' ?> metadata fetched <?= h(fmt_date_iso((string)$vm['metadata_fetched_at'])) ?>
-          <?php elseif ($vm === []): ?>
-            <?= $srcOk ? '·' : '' ?> no video metadata available for this video (yet)
-          <?php endif; ?>
-        </p>
-      </section>
-    <?php endif; ?>
-    <?php if ($txt !== null): ?>
-      <?php $dur = is_numeric($meta['duration_s'] ?? null)
+      $dur = is_numeric($meta['duration_s'] ?? null)
           ? sprintf('%d:%02d', intdiv((int)round((float)$meta['duration_s']), 60), (int)round((float)$meta['duration_s']) % 60)
-          : null; ?>
-      <p class="eyebrow">spoken transcript<?= $dur !== null ? ' · ' . h($dur) : '' ?></p>
+          : null;
+      // The spoken language and the length belong to the recording, so they
+      // sit with the transcript, not with what the uploader wrote.
+      $spoken = array_values(array_filter([$lang, $dur], fn ($v) => $v !== null));
+    ?>
+    <div class="video">
+    <?php if ($vm !== [] || $srcOk || $lang !== null): ?>
+      <aside class="videometa" aria-labelledby="about-video">
+        <h2 id="about-video">About this video</h2>
+        <?php if (($vm['video_description'] ?? '') !== ''): ?>
+          <div class="videometa__row">
+            <p class="eyebrow">Video caption</p>
+            <?php // Hashtag muting runs on h()-escaped text: the (?<!&) guard keeps the
+                  // pattern off the #039-style innards of entities h() just produced. ?>
+            <p class="desc"><?= preg_replace('/(?<!&)(#\w+)/u', '<span class="tag">$1</span>', h((string)$vm['video_description'])) ?></p>
+          </div>
+        <?php endif; ?>
+        <?php if ($facts !== []): ?>
+          <dl class="facts">
+          <?php foreach ($facts as [$label, $value]): ?>
+            <div class="videometa__row"><dt><?= $label ?></dt><dd><?= $value ?></dd></div>
+          <?php endforeach; ?>
+          </dl>
+        <?php endif; ?>
+        <div class="videometa__row">
+          <?php if ($srcOk): ?><a href="<?= h($srcUrl) ?>" rel="noreferrer noopener" target="_blank">Watch on TikTok<?= go_mark() ?></a><?php endif; ?>
+          <?php if (($vm['metadata_fetched_at'] ?? '') !== ''): ?>
+            <p class="meta">Metadata fetched <?= h(fmt_date_iso((string)$vm['metadata_fetched_at'])) ?></p>
+          <?php elseif ($vm === []): ?>
+            <p class="meta">No video metadata available for this video (yet).</p>
+          <?php endif; ?>
+        </div>
+      </aside>
+    <?php endif; ?>
+    <div class="video__main">
+    <?php if ($txt !== null): ?>
+      <p class="eyebrow">Spoken transcript<?= $spoken !== [] ? " · " . h(implode(" · ", $spoken)) : "" ?></p>
       <?php if (trim((string)$txt) === ''): ?>
         <p class="meta">No speech detected in this video.</p>
       <?php else: ?>
         <blockquote class="transcript-block"><?= h(trim((string)$txt)) ?></blockquote>
       <?php endif; ?>
     <?php else: ?>
-      <p class="notice">(transcript text file missing)</p>
+      <p class="notice">The transcript text file is missing.</p>
     <?php endif; ?>
     <?php $segs = $meta['raw_signals']['segments'] ?? null; if (is_array($segs)): ?>
       <h2>Segment confidence</h2>
-      <p class="meta">Average Whisper token probability per segment — values below 0.50 are flagged.</p>
+      <p class="meta">Average Whisper token probability per segment. Values below 0.50 are marked.</p>
       <table class="rows segments">
-        <thead><tr><th>avg p</th><th>segment</th></tr></thead>
+        <thead><tr><th class="num">Confidence</th><th>Segment</th></tr></thead>
         <tbody>
         <?php foreach ($segs as $seg): [$avg, $stext] = $seg_info($seg); ?>
           <tr><td class="num <?= ($avg !== null && $avg < 0.5) ? 'low' : '' ?>">
@@ -124,10 +127,12 @@ $seg_info = function (array $seg): array {
         </tbody>
       </table>
     <?php elseif ($meta !== null): ?>
-      <p class="notice">No raw_signals in this artifact (pre-Epic-1 schema).</p>
+      <p class="notice">This transcript has no confidence data (it was made before the pipeline recorded it).</p>
     <?php endif; ?>
     <?php if ($meta !== null): ?>
-      <details class="raw"><summary>raw JSON</summary><pre><?= h(json_encode($meta, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) ?></pre></details>
+      <details class="raw"><summary>Raw JSON</summary><pre><?= h(json_encode($meta, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) ?></pre></details>
     <?php endif; ?>
+    </div>
+    </div>
   <?php endif; ?>
 </main>

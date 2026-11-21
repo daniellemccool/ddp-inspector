@@ -24,6 +24,54 @@ function asset_url(string $rel): string {
     return url($rel) . '?v=' . $v;
 }
 
+/**
+ * The document head and the site header every page shares, up to and
+ * including the opening <main>. $section is the nav link to mark current:
+ * 'participants' or 'settings'. The header follows datadonation.eu's: the
+ * name over a subtitle (here the study's name), the links on the right.
+ */
+function page_top(string $title, string $section): void {
+    $storage = inst_root() !== null;
+    $study = $storage ? trim((string)(inst_load()['study_name'] ?? '')) : '';
+    $links = ['participants' => ['index.php', 'Participants']];
+    if ($storage) { $links['settings'] = ['setup.php', 'Settings']; }
+    ?>
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DDP Inspector — <?= h($title) ?></title>
+<link rel="stylesheet" href="<?= h(asset_url('assets/tokens.css')) ?>">
+<link rel="stylesheet" href="<?= h(asset_url('assets/style.css')) ?>">
+<a class="skip-link" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="site-header__inner">
+    <a class="site-header__brand" href="<?= h(url('index.php')) ?>">
+      <span class="site-header__name">DDP Inspector</span>
+      <span class="site-header__subtitle"><?= h($study !== '' ? $study : 'Data donations and transcripts') ?></span>
+    </a>
+    <nav class="site-nav" aria-label="Main">
+      <ul class="site-nav__list">
+      <?php foreach ($links as $key => [$href, $label]): ?>
+        <li class="site-nav__item<?= $key === $section ? ' is-active' : '' ?>"><a href="<?= h(url($href)) ?>"<?= $key === $section ? ' aria-current="true"' : '' ?>><?= h($label) ?></a></li>
+      <?php endforeach; ?>
+      </ul>
+    </nav>
+  </div>
+</header>
+<main class="wrap" id="main">
+<?php
+}
+
+/**
+ * The end of an action: a short dotted line and the arrow disc, as on
+ * datadonation.eu's "More" links. Goes last inside a button or link.
+ */
+function go_mark(): string {
+    return '<i class="more__dots"></i><svg class="go" width="24" height="24" viewBox="-18 -18 36 36" aria-hidden="true">'
+        . '<circle r="18"/><path d="M-8 0 h16 M1.5 -6.5 l6.5 6.5 l-6.5 6.5"/></svg>';
+}
+
 function fmt_ts(?int $ts): string { return $ts === null ? '—' : gmdate('Y-m-d H:i', $ts); }
 
 /** Human-scale counts: 3,181 · 11.4M · 1.1B (full value belongs in a title attr). */

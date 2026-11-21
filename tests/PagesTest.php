@@ -23,6 +23,13 @@ check(str_contains($html, 'participant.php?id=p1'), 'index links to participant 
 check(str_contains($html, 'tiktok'), 'index shows platform');
 check(str_contains($html, 'skipped'), 'index shows skipped-file notice');
 check(!str_contains($html, 'participant.php?id=preview'), 'index does not list skipped preview participant');
+// The shared head and header (page_top): the design tokens before the stylesheet,
+// the current section marked, and no Settings link outside storage mode.
+check(preg_match('~assets/tokens\.css\?v=\d+">\s*<link rel="stylesheet" href="assets/style\.css\?v=\d+">~', $html) === 1,
+      'pages load the design tokens, then the stylesheet');
+check(str_contains($html, '<li class="site-nav__item is-active"><a href="index.php" aria-current="true">Participants</a></li>'),
+      'header marks Participants as the current section');
+check(!str_contains($html, 'setup.php'), 'dev-mode header has no Settings link');
 
 // --- participant.php ---
 $html = render_page('participant.php', ['id' => 'p1', 'seed' => '1', 'n' => '1']);
@@ -46,12 +53,14 @@ check(str_contains($ok, 'it&#039;s great'), 'caption apostrophe survives as one 
 check(!str_contains($ok, '<span class="tag">#039'), 'hashtag muting must not match inside h() entities');
 check(str_contains($ok, '<span class="tag">#test</span>'), 'real hashtags still muted');
 check(str_contains($ok, '@fixtureuser'), 'video metadata: uploader rendered');
-check(str_contains($ok, 'posted 19 Apr 2026, 10:28'), 'video metadata: pretty date');
-check(str_contains($ok, '11.4M views') && str_contains($ok, '1.1M likes') && str_contains($ok, '3,181 comments'),
+check(str_contains($ok, '<dt>Posted</dt><dd>19 Apr 2026, 10:28</dd>'), 'video metadata: pretty date');
+check(str_contains($ok, '<dt>Views</dt><dd><span title="11,400,000">11.4M</span></dd>')
+      && str_contains($ok, '<dt>Likes</dt><dd><span title="1,100,000">1.1M</span></dd>')
+      && str_contains($ok, '<dt>Comments</dt><dd><span title="3,181">3,181</span></dd>'),
       'video metadata: compact counts');
 check(str_contains($ok, 'title="11,400,000"'), 'video metadata: full count in title attr');
 check(str_contains($ok, 'English'), 'video metadata: language name');
-check(preg_match('~<a href="https?://[^"]+" rel="noreferrer noopener" target="_blank">watch on TikTok~', $ok) === 1,
+check(preg_match('~<a href="https?://[^"]+" rel="noreferrer noopener" target="_blank">Watch on TikTok~', $ok) === 1,
       'video metadata: source url clickable');
 
 $none = render_page('transcript.php', ['vid' => '1111111111111111111']);
@@ -111,6 +120,10 @@ check(str_contains($storageIndex, '3 donation file(s)'), 'storage-mode index sho
 check(str_contains($storageIndex, '<form method="post" action="setup.php">'), 'storage-mode index has the refresh-donations form');
 check(str_contains($storageIndex, 'name="csrf"'), 'storage-mode refresh form carries a csrf field');
 check(str_contains($storageIndex, 'Check for new donations'), 'storage-mode index shows the refresh button');
+check(str_contains($storageIndex, '<span class="site-header__subtitle">Storage-mode pages test</span>'),
+      'storage-mode header shows the study name under the product name');
+check(str_contains($storageIndex, '<li class="site-nav__item"><a href="setup.php">Settings</a></li>'),
+      'storage-mode header links to Settings');
 
 $storageParticipantA = render_page('participant.php', ['id' => 'spA', 'seed' => '1', 'n' => '5']);
 check(str_contains($storageParticipantA, 'Videos you watched'), 'doc-matched section title rendered');
@@ -151,7 +164,7 @@ check(str_contains($dbPagePb, 'submitted 2 files; the first one with data is sho
 $dbTx = render_page('transcript.php', ['vid' => '7000000000000001001']);
 check(str_contains($dbTx, 'Hello world'), 'db transcript page: text');
 check(str_contains($dbTx, 'Segment confidence') && str_contains($dbTx, '0.75'), 'db transcript page: segment confidence');
-check(str_contains($dbTx, '@uploader_a') && str_contains($dbTx, 'watch on TikTok'), 'db transcript page: metadata');
+check(str_contains($dbTx, '@uploader_a') && str_contains($dbTx, 'Watch on TikTok'), 'db transcript page: metadata');
 $dbTxGated = render_page('transcript.php', ['vid' => '7000000000000001004']);
 check(str_contains($dbTxGated, 'not available in this region') && !str_contains(strtolower($dbTxGated), 'not transcribed yet'), 'db transcript page: untranscribed reason');
 $dbTxNone = render_page('transcript.php', ['vid' => '1111111111111111111']);
