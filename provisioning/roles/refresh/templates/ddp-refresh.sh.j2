@@ -127,20 +127,32 @@ human_size() { # human_size <bytes>: "33 GB" (numfmt, when installed), else "<by
   esac
 }
 db_listing_size() { # db_listing_size <listing> <separators>: the size of the one file listed
-  # The listing names the declared file only when every line ends in its
-  # name, after one of <separators> (gocmd prints a line per replica). A
-  # folder path lists the folder's contents instead, and fetching it would
-  # pull the whole folder: fail then, as for an empty listing. The size is
-  # the number just before the date (rclone lsl, ils-style lines), else the
-  # first number on the line; empty when there is none.
-  local name line size="" first="" prev="" f n=0
+  # The listing names the declared file only when every data line names it:
+  # the line ends in its name after one of <separators> (rclone lsl, ils
+  # style), or one of its fields is the name or a path ending in "/<name>"
+  # (gocmd v0.12.2 prints a "TYPE PATH OWNER …" header, skipped, then one
+  # line per replica with the full logical path mid-line and a status
+  # column last — live 2026-11-21). A folder path lists the folder's
+  # contents instead, and fetching it would pull the whole folder: fail
+  # then, as for an empty listing. The size is the number just before the
+  # date, else the first number on the line; empty when there is none.
+  local name line size="" first="" prev="" f n=0 named
   local -a fields
   name="$(basename "${DBPATH}")"
   while IFS= read -r line; do
     line="${line%"${line##*[![:space:]]}"}"   # drop trailing blanks
     [ -n "${line}" ] || continue
+    read -ra fields <<<"${line}"
+    [ "${fields[0]}" = TYPE ] && continue     # gocmd's column header
+    named=0
     # shellcheck disable=SC2254 # $2 is a bracket-expression body on purpose
-    case "${line}" in *[$2]"${name}") ;; *) return 1 ;; esac
+    case "${line}" in *[$2]"${name}") named=1 ;; esac
+    if [ "${named}" -eq 0 ]; then
+      for f in "${fields[@]}"; do
+        [ "${f}" = "${name}" ] || [ "${f%/"${name}"}" != "${f}" ] && { named=1; break; }
+      done
+    fi
+    [ "${named}" -eq 1 ] || return 1
     n=$((n + 1))
     [ "${n}" -eq 1 ] || continue
     read -ra fields <<<"${line%"${name}"}"
