@@ -25,12 +25,14 @@ foreach ($loaded['participants'] as $p) {
 
 // Skip classification: declined donations and empty uploads are normal
 // campaign artifacts — summarize them quietly, expandable for detail.
-$skipKinds = ['declined' => 0, 'empty' => 0, 'invalid' => 0];
+$skipKinds = ['declined' => 0, 'empty' => 0, 'invalid' => 0, 'not_donated' => 0, 'declined_consent' => 0];
 foreach ($loaded['skipped'] as $s) { $skipKinds[$s['kind'] ?? 'invalid']++; }
 $skipBits = [];
 if ($skipKinds['declined']) { $skipBits[] = $skipKinds['declined'] . ' declined donation(s)'; }
 if ($skipKinds['empty'])    { $skipBits[] = $skipKinds['empty'] . ' empty file(s)'; }
 if ($skipKinds['invalid'])  { $skipBits[] = $skipKinds['invalid'] . ' unreadable file(s)'; }
+if ($skipKinds['not_donated']) { $skipBits[] = $skipKinds['not_donated'] . ' consented, did not donate'; }
+if ($skipKinds['declined_consent']) { $skipBits[] = $skipKinds['declined_consent'] . ' declined consent'; }
 // The form below calls csrf_field() well after HTML output has started; force the
 // CSRF cookie to be issued now, before any output is sent (setcookie() is a no-op
 // once headers are sent — see Task 10 carry-forward constraint).
@@ -70,8 +72,8 @@ if ($storageMode) { csrf_token(); }
       <summary>⚠ <?= count($loaded['skipped']) ?> file(s) set aside — <?= h(implode(', ', $skipBits)) ?></summary>
       <ul>
       <?php foreach ($loaded['skipped'] as $s): ?>
-        <li><?= h($s['participant']) ?> — <?= h($s['kind'] === 'declined' ? 'declined to donate' : ($s['kind'] === 'empty' ? 'empty upload' : 'unreadable file')) ?>
-          <span class="meta">(<?= h($s['path']) ?>)</span></li>
+        <li><?= h($s['participant']) ?> — <?= h(match ($s['kind']) { 'declined' => 'declined to donate', 'empty' => 'empty upload', 'not_donated' => 'consented, did not donate', 'declined_consent' => 'declined consent', default => 'unreadable file' }) ?>
+          <?php if ($s['path'] !== ''): ?><span class="meta">(<?= h($s['path']) ?>)</span><?php endif; ?></li>
       <?php endforeach; ?>
       </ul>
     </details>

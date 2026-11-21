@@ -121,6 +121,23 @@ check(str_contains($storageParticipantA, 'removed') && str_contains($storagePart
 $storageParticipantB = render_page('participant.php', ['id' => 'spB', 'seed' => '1', 'n' => '5']);
 check(str_contains($storageParticipantB, 'donated more than once for this platform'), 'superseded note rendered');
 
+// Database mode index: donated participants listed, the other two set aside.
+$dbScratch = sys_get_temp_dir() . '/ddp-inspector-pages-db-' . getmypid();
+exec('rm -rf ' . escapeshellarg($dbScratch));
+@mkdir("$dbScratch/data/analyses", 0755, true);
+$GLOBALS['__cfg'] = ['storage_root' => $dbScratch, 'default_n' => 15, 'base_path' => ''];
+inst_save(['study_name' => 'Db index', 'source_mode' => 'local', 'local_path' => "$dbScratch/data/inbox",
+           'cadence' => 'off', 'default_n' => 15,
+           'analyses' => ['database' => ['enabled' => true, 'path' => 'analysis.sqlite']]]);
+(new PDO("sqlite:$dbScratch/data/analyses/analysis.sqlite"))->exec((string)file_get_contents(__DIR__ . "/fixtures/analysis.sql"));
+study_reset();
+$dbIndex = render_page('index.php', []);
+check(str_contains($dbIndex, '>pa<') || str_contains($dbIndex, 'pa</a>'), 'db index lists pa');
+check(str_contains($dbIndex, 'consented, did not donate'), 'db index labels the not-donated set-aside kind');
+check(str_contains($dbIndex, 'declined consent'), 'db index labels the declined-consent kind');
+study_reset();
+exec('rm -rf ' . escapeshellarg($dbScratch));
+
 // Separate scratch instance: configured, but nothing donated yet -> friendly empty state.
 $emptyScratch = sys_get_temp_dir() . '/ddp-inspector-pages-empty-' . getmypid();
 exec('rm -rf ' . escapeshellarg($emptyScratch));

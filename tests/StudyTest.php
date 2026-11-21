@@ -91,6 +91,60 @@ $GLOBALS['__cfg'] = ['ddp_dir' => __DIR__ . '/fixtures/ddp'];
 eq(study_db_file(), null, 'no file location without storage root or config');
 eq(study_db_status(), 'off', 'developer mode without analysis_db is off');
 
+
+// ---- Database backend: participant list and coverage cache ----
+$GLOBALS['__cfg'] = ['storage_root' => $sc, 'default_n' => 15, 'base_path' => ''];
+inst_save($base + ['analyses' => ['database' => ['enabled' => true, 'path' => 'analysis.sqlite']]]);
+study_test_build_db($dbfile);
+study_reset();
+eq(study_mode(), 'database', 'db list: database mode');
+eq(study_donation_count(), 3, 'db list: donation count = donated participants');
+$dl = study_participants();
+eq(array_keys($dl['participants']), ['pa', 'pb', 'pc'], 'db list: donated participants only');
+$skipByP = [];
+foreach ($dl['skipped'] as $s) { $skipByP[$s['participant']] = $s['kind']; }
+eq($skipByP, ['pd' => 'not_donated', 'pe' => 'declined_consent'], 'db list: the others are set aside with the two kinds');
+$pa = $dl['participants']['pa'];
+eq($pa['id'], 'pa', 'db list: id is a string');
+eq(array_keys($pa['platforms']), ['tiktok'], 'db list: tiktok platform');
+$paT = $pa['platforms']['tiktok'];
+eq(array_keys($paT['tables']), ['tiktok_watch_history', 'tiktok_favorite_videos', 'tiktok_share_history', 'tiktok_comments'],
+   'db list: NULL n_like -> no like table key');
+eq($paT['tables']['tiktok_watch_history'], ['count' => 4,
+   'earliest' => gmmktime(10, 0, 0, 1, 15, 2026), 'latest' => gmmktime(10, 10, 0, 1, 15, 2026)],
+   'db list: watch count and range ignore the NULL watched_at');
+eq($paT['deleted'], ['watch' => 0, 'favorite' => 1, 'share' => 0, 'comment' => 0], 'db list: deleted from deleted_* (non-NULL only)');
+eq([$paT['videos_total'], $paT['videos_transcribed']], [6, 1], 'db list: coverage over distinct non-NULL video ids');
+$pbT = $dl['participants']['pb']['platforms']['tiktok'];
+eq($pbT['tables']['tiktok_favorite_videos'], ['count' => 0, 'earliest' => null, 'latest' => null], 'db list: 0 count is present and empty');
+eq([$pbT['videos_total'], $pbT['videos_transcribed']], [3, 1], 'db list: pb coverage (video shared with pa counted per participant)');
+$pcT = $dl['participants']['pc']['platforms']['tiktok'];
+eq(array_keys($pcT['tables']), ['tiktok_watch_history', 'tiktok_comments'], 'db list: pc sections');
+eq([$pcT['videos_total'], $pcT['videos_transcribed']], [0, 0], 'db list: comments-only participant has no videos');
+
+$cdir = "$sc/cache/study";
+$cf = glob("$cdir/participants-*.json");
+eq(count($cf), 1, 'db list: one cache file written');
+check(preg_match('/participants-' . filesize($dbfile) . '-' . filemtime($dbfile) . '\.json$/', $cf[0] ?? '') === 1, 'db list: cache file named by size and mtime');
+$old = $cf[0];
+$cached = json_decode((string)file_get_contents($old), true);
+$cached['participants']['pa']['id'] = 'from-cache';
+file_put_contents($old, json_encode($cached));
+eq(study_participants()['participants']['pa']['id'], 'from-cache', 'db list: second call reads the cache file');
+file_put_contents("$cdir/participants-1-1.json", '{}');
+touch($dbfile, time() + 120);
+study_reset();
+$dl2 = study_participants();
+eq($dl2['participants']['pa']['id'], 'pa', 'db list: new mtime recomputes');
+$cf2 = glob("$cdir/participants-*.json");
+eq(count($cf2), 1, 'db list: old cache files removed');
+check($cf2[0] !== $old, 'db list: a new cache file replaced the old one');
+
+// Developer mode: no cache root -> computed, nothing cached.
+$GLOBALS['__cfg'] = ['ddp_dir' => __DIR__ . '/fixtures/ddp', 'analysis_db' => $dbfile];
+study_reset();
+eq(study_mode(), 'database', 'db list: developer-mode database');
+eq(array_keys(study_participants()['participants']), ['pa', 'pb', 'pc'], 'db list: developer mode computes without a cache');
 // Raw backend (developer config: fixture donations + transcripts tree, no database).
 $GLOBALS['__cfg'] = require __DIR__ . '/config.test.php';
 study_reset();

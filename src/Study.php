@@ -126,6 +126,7 @@ function study_db_notice(): ?string {
  * @return array{participants: array<string, array{id:string, platforms: array<string, array{tables: array<string, array{count:int, earliest:?int, latest:?int}>, deleted: array<string,int>, videos_total:?int, videos_transcribed:?int}>}>, skipped: list<array{path:string, participant:string, kind:string, reason:string}>}
  */
 function study_participants(): array {
+    if (study_mode() === 'database') { return study_db_participants(); }
     return study_raw_participants();
 }
 
@@ -153,6 +154,7 @@ function study_transcript(string $vid): ?array {
 }
 
 function study_donation_count(): int {
+    if (study_mode() === 'database') { return study_db_donation_count(study_db()); }
     return inst_donation_count();
 }
 
