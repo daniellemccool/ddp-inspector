@@ -57,33 +57,38 @@ body { margin:0; min-height:100vh; background:var(--surface); color:var(--text);
    side. What a page marks .niche sits in the white niche under the shallow
    side. Everything is measured from the right edge, so it holds at any width. */
 :root { --tb-depth:84px; --tb-drop:44px; --tb-step:44px; --tb-deep:clamp(280px, 34vw, 640px); }
-.band { position:relative; background:var(--sky); overflow-x:clip; }
+/* --tb-line is how far down the band the title's line runs. */
+.band { position:relative; background:var(--sky); overflow-x:clip; --tb-line:50%; }
 /* Three columns, as the page below: the left margin, the content column, the right margin. */
 .band__row { display:grid; min-height:var(--tb-depth);
              grid-template-columns:minmax(var(--edge), 1fr) minmax(0, calc(var(--site-width) - 2 * var(--edge))) minmax(var(--edge), 1fr); }
 .band__lead { grid-column:1; position:relative; margin-right:12px; }
 .band__main { grid-column:2 / 4; display:flex; align-items:center; min-width:0; }
 .band__lead::before, .band__line { content:""; position:absolute; height:var(--line-band); background:var(--on-sky); }
-.band__lead::before { left:0; right:0; top:50%; }
-.band__lead::after, .band__thread::before { content:""; position:absolute; top:calc(50% - var(--node) / 2 + .5px);
+.band__lead::before { left:0; right:0; top:var(--tb-line); }
+.band__lead::after, .band__thread::before { content:""; position:absolute; top:calc(var(--tb-line) - var(--node) / 2 + .5px);
                                             width:var(--node); height:var(--node);
                                             border-radius:var(--radius-circle); background:var(--on-sky); }
 .band__lead::after { right:calc(var(--node) / -2); }
 .band h1 { flex:0 1 auto; min-width:0; margin:0 12px 0 0; padding:var(--space-16) 0; color:var(--on-sky); }
 /* An id is too small for white on sky: it takes the band's blue, set bold,
-   as the front page's subtitle does, and its small label is dark ink. The label floats
-   above, so the line runs through the id. */
-.band h1:has(.id) { position:relative; padding:0; }
-.band h1 .eyebrow { position:absolute; left:0; bottom:calc(100% + 5px); margin:0; white-space:nowrap; color:var(--heading); }
+   as the front page's subtitle does. Only white and blue are drawn on the
+   band, so its label is a white eyebrow, larger and bolder than on the page.
+   The line runs through the id. */
+/* The label and the id sit in the band as one block, so the id and its line are a little below the middle. */
+.band:has(h1 .id) { --tb-line:calc(50% + 10px); }
+.band h1:has(.id) { position:relative; padding:20px 0 0; }
+.band h1 .eyebrow { position:absolute; left:0; top:0; margin:0; white-space:nowrap;
+                    font-size:14px; font-weight:800; color:var(--on-sky); }
 .band h1 .id { color:var(--blue); font-weight:700; }
 .band__thread { flex:1; align-self:stretch; position:relative; min-width:0; }
 .band__thread::before { left:calc(var(--node) / -2); }
-.band__line--title { left:0; right:calc(var(--tb-deep) - 40px); top:50%; }
-.band__drop { position:absolute; right:calc(var(--tb-deep) - 96px); top:50%; width:56px; height:calc(50% + 8px);
+.band__line--title { left:0; right:calc(var(--tb-deep) - 40px); top:var(--tb-line); }
+.band__drop { position:absolute; right:calc(var(--tb-deep) - 96px); top:var(--tb-line); width:56px; height:calc(100% - var(--tb-line) + 8px);
               overflow:visible; fill:none; stroke:var(--on-sky); stroke-width:var(--line-band); }
 .band__line--deep { right:0; width:calc(var(--tb-deep) - 96px); top:calc(100% + 8px); }
 .band__piece { position:absolute; transform:translate(50%, -50%); }
-.band__piece--phone { right:calc(var(--tb-deep) + 120px); top:calc(50% + .5px); }
+.band__piece--phone { right:calc(var(--tb-deep) + 120px); top:calc(var(--tb-line) + .5px); }
 .band__piece--badge { right:calc(var(--tb-deep) * .55); top:calc(100% + 8.5px); }
 .band__piece--globe { right:calc(var(--page-edge) - var(--gutter) + var(--edge) + 20px); top:calc(100% + 8.5px); }
 .band__deep { position:absolute; right:0; top:calc(100% - 1px); width:calc(var(--tb-deep) + 1px);
