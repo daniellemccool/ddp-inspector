@@ -113,6 +113,29 @@ eq($r['flash'][0]['kind'], 'ok', 'local source saved');
 eq(inst_source_exists(), false, 'switching to local mode deletes stale source.json');
 check(!is_file("$scratch2/config/source.json"), 'source.json removed from disk on local mode switch');
 
+// Analysis database: declared in Setup, stored under instance.json "analyses".
+$base = ['action' => 'save_source', 'csrf' => csrf_token(), 'source_mode' => 'local',
+    'study_name' => 'Local study', 'local_path' => '/tmp/some-donations'];
+$r = inst_handle_setup_post($base + ['analysis_db_enabled' => '1',
+    'analysis_db_path' => 'analysis/out/analysis.sqlite'], []);
+eq($r['flash'][0]['kind'], 'ok', 'analysis database declaration saved');
+eq(inst_load()['analyses']['database'], ['enabled' => true, 'path' => 'analysis/out/analysis.sqlite'], 'analysis database stored');
+$r = inst_handle_setup_post($base + ['analysis_db_path' => 'analysis/out/analysis.sqlite'], []);
+eq(inst_load()['analyses']['database'], ['enabled' => false, 'path' => 'analysis/out/analysis.sqlite'], 'unchecked box disables but keeps the path');
+inst_handle_setup_post($base + ['analysis_db_enabled' => '1', 'analysis_db_path' => 'x/y.sqlite'], []);
+inst_handle_setup_post($base, []);
+eq(inst_load()['analyses']['database'], ['enabled' => true, 'path' => 'x/y.sqlite'], 're-save without the block keeps the stored values');
+foreach (['../x.sqlite', '/abs.sqlite'] as $bad) {
+    $r = inst_handle_setup_post($base + ['analysis_db_enabled' => '1', 'analysis_db_path' => $bad], []);
+    eq($r['flash'][0]['kind'], 'error', "analysis path '$bad' rejected");
+    check(str_contains($r['flash'][0]['text'], 'path'), "error for '$bad' names the path");
+}
+eq(inst_load()['analyses']['database']['path'], 'x/y.sqlite', 'rejected path leaves the stored one alone');
+check(inst_valid_relative_path('a/b.sqlite'), 'relative path valid');
+foreach (['', '/a', 'a/../b', '..', "a\0b"] as $bad) {
+    check(!inst_valid_relative_path($bad), 'invalid relative path: ' . json_encode($bad));
+}
+
 $r = inst_handle_setup_post(['action' => 'refresh_now', 'csrf' => csrf_token()], []);
 check(is_file("$scratch2/state/refresh-requested"), 'refresh flag touched by handler');
 
