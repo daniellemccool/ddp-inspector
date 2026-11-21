@@ -83,7 +83,7 @@ $fakeg = "$scratch/fake-gocmd";
 $glog = "$scratch/gocmd-args.log";
 $gcopy = "$scratch/gocmd-env-copy.json";
 $gpw = "$scratch/gocmd-password.txt";
-$fakeBody = function (string $exitWith, string $say): string use ($glog, $gcopy, $gpw) {
+$fakeBody = function (string $exitWith, string $say) use ($glog, $gcopy, $gpw): string {
     return "#!/bin/sh\nprintf '%s' \"\$*\" > " . escapeshellarg($glog) . "\n"
         . "printf '%s' \"\$IRODS_USER_PASSWORD\" > " . escapeshellarg($gpw) . "\n"
         . "[ \"\$1\" = -c ] || exit 3\n"
