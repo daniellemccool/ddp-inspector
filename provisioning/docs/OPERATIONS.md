@@ -78,6 +78,8 @@ growability first):
 |---|---|
 | Donation-only (mono studies; MBs of JSON) | 10 GB |
 | Transcript-heavy (tars + extracted ≈ 2× tree) | 2–3× the transcript tars |
+| Analysis database declared (Yoda / Research Drive) | 2× the database file + 10 GB (the file plus one temporary copy while a new version replaces it) |
+| Analysis database declared (local folder) | 10 GB (the database is linked, not copied) |
 
 Two volumes attached (e.g. a team's analyses drive alongside ours) → set
 `storage_path` explicitly at launch (S10); auto-detect refuses to guess.
@@ -126,6 +128,28 @@ What the refresh reads under the folder:
 tars: all shards are pulled before any is unpacked, so the volume needs
 roughly the tar total plus the unpacked tree.
 
+**Database mode.** When Setup declares an analysis database (a path
+relative to the study folder, e.g. `analysis/analysis.sqlite`), the
+refresh fetches ONLY that file, in every source mode: no donations, no
+transcripts or transcript tars, nothing unpacked. The pages read
+everything from the database.
+
+- Yoda: `gocmd ls -l` on the file; Research Drive: `rclone lsl` on it. The
+  listing (size and modification time) is compared with the one stored at
+  the last fetch in `state/analysis-db.remote`; the file is downloaded only
+  when the listing differs or the local copy is missing ("The analysis
+  database is up to date." otherwise). The download lands in
+  `data/analyses/.analysis-db-staging/` and is renamed over
+  `data/analyses/analysis.sqlite`, so pages never read a partial file; the
+  listing is stored only after that swap.
+- Local folder: `data/analyses/analysis.sqlite` is a symlink to the
+  folder's file; nothing is copied and nothing in the folder is written.
+- The participant count after a refresh is the participants who donated,
+  from the database.
+- On a workspace that used the transcript tars before, the unpacked tree
+  `data/analyses/transcripts/` is no longer read and can be deleted once
+  database mode works.
+
 ## 5. Research Drive share links
 
 Researcher-self-serve in the RD web portal: share the study's folder by
@@ -137,7 +161,8 @@ The refresh lists the shared folder and pulls only the donations (§2): its
 own `*.json` files (an older share of the donations folder itself), else
 `inbox/*.json`, else the newest `donations/*.zip` (copied to the cache,
 unpacked, removed). Only one level deep — subfolders are never pulled
-along.
+along. With an analysis database declared, it pulls only that file
+(database mode, §4).
 
 ## 6. Debugging a refresh
 
@@ -151,6 +176,17 @@ Operator path (all researcher-visible state lives on the volume):
 
 The refresh is flock-serialized and idempotent — re-running after any
 failure is always safe.
+
+**Database mode (§4):** the log says `analysis database up to date` or
+`fetched the analysis database (<bytes> bytes)`. To force a re-fetch
+(e.g. a suspect local copy), delete the stored listing and refresh:
+
+    sudo rm <storage_root>/ddp-inspector/state/analysis-db.remote
+
+A failed download leaves the previous database in place and no staging
+files behind. "The analysis database was not found at <path> in the study
+folder" means the declared path does not exist under the study folder:
+fix the path in Settings.
 
 **Site down with ERR_CONNECTION_REFUSED:** check `sudo systemctl status
 nginx`. SRC-Nginx's `authentication.conf` proxies to

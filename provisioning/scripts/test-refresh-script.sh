@@ -30,6 +30,8 @@ export FAKE_RD="${TMP}/rd"; mkdir -p "${FAKE_RD}"
 # failed", like the real server); a ticket (-T) is a hard error. It copies the
 # -c dir's irods_environment.json to FAKE_GOCMD_ENV_COPY for assertions.
 # FAKE_GOCMD_FAIL=1 = the server rejects the login (expired/revoked DAP).
+# ls -l prints "<size> <mtime-epoch> <name>" per data object (from stat).
+# FAKE_GOCMD_GET_FAIL=1 = a get copies the data, then fails (stopped partway).
 export FAKE_YODA_PASSWORD="dap-secret"
 export FAKE_GOCMD_ENV_COPY="${TMP}/gocmd-env-copy.json"
 mkdir -p "${TMP}/bin"
@@ -42,19 +44,25 @@ if [ "${FAKE_GOCMD_FAIL:-0}" = "1" ] || [ "${IRODS_USER_PASSWORD:-}" != "${FAKE_
   echo 'Authentication failed (auth scheme: "pam_password", username: "x", zone: "nluu10p")!' >&2; exit 1
 fi
 resolve() { case "$1" in i:*) printf '%s' "${FAKE_REMOTE}${1#i:}";; *) printf '%s' "$1";; esac; }
-args=(); cmd=""
+args=(); cmd=""; long=0
 while [ $# -gt 0 ]; do
   case "$1" in
     -c) cp "$2/irods_environment.json" "${FAKE_GOCMD_ENV_COPY}"; shift 2 ;;
+    -l)             long=1; shift ;;
     -*)             shift ;;
     *)  if [ -z "${cmd}" ]; then cmd="$1"; else args+=("$1"); fi; shift ;;
   esac
 done
+lsl() { echo "$(stat -c '%s %Y' "$1") $(basename "$1")"; }
 case "${cmd}" in
-  ls)   p="$(resolve "${args[0]}")"; [ -e "${p}" ] || { echo "not found" >&2; exit 1; }; ls "${p}" ;;
+  ls)   p="$(resolve "${args[0]}")"; [ -e "${p}" ] || { echo "not found" >&2; exit 1; }
+        if [ "${long}" = 0 ]; then ls "${p}"
+        elif [ -d "${p}" ]; then for e in "${p}"/*; do [ -f "${e}" ] && lsl "${e}"; done; exit 0
+        else lsl "${p}"; fi ;;
   sync) s="$(resolve "${args[0]}")"; d="$(resolve "${args[1]}")"
         if [ -d "${d}" ]; then cp -r "${s}" "${d}/"; else mkdir -p "${d}"; cp -r "${s}/." "${d}/"; fi ;;
-  get)  s="$(resolve "${args[0]}")"; d="${args[1]}"; cp -r "${s}" "${d}" ;;
+  get)  s="$(resolve "${args[0]}")"; d="${args[1]}"; cp -r "${s}" "${d}"
+        [ "${FAKE_GOCMD_GET_FAIL:-0}" = "1" ] && { echo "connection reset" >&2; exit 1; }; exit 0 ;;
   *)    exit 0 ;;
 esac
 FAKE
@@ -63,8 +71,10 @@ chmod +x "${TMP}/bin/gocmd"
 # fake rclone over FAKE_RD (the share's top folder): ":webdav:<path>" is
 # FAKE_RD/<path>. obscure echoes; lsd lists the root (probe); lsf lists one
 # folder like real rclone (dirs with a trailing /, --files-only and
-# --include honoured); copy copies a file or folder into a local dir; sync
-# mirrors the source folder's top-level files matching --include into dest.
+# --include honoured); lsl lists a file (or a folder's files) as
+# "<size> <date> <time> <name>"; copy copies a file or folder into a local
+# dir; sync mirrors the source folder's top-level files matching --include
+# into dest.
 cat > "${TMP}/bin/rclone" <<'FAKE'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -95,6 +105,11 @@ case "${cmd}" in
              if [ -d "${e}" ]; then [ "${files_only}" = 1 ] || echo "${n}/"
              else [[ "${n}" == ${inc} ]] && echo "${n}"; fi
            done; exit 0 ;;
+  lsl)     p="$(resolve "${pos[0]}")"
+           row() { printf '%9d %s %s\n' "$(stat -c %s "$1")" "$(date -r "$1" '+%F %T.%N')" "$(basename "$1")"; }
+           if [ -f "${p}" ]; then row "${p}"
+           elif [ -d "${p}" ]; then for e in "${p}"/*; do [ -f "${e}" ] && row "${e}"; done
+           else echo "directory not found" >&2; exit 3; fi; exit 0 ;;
   copy)    s="$(resolve "${pos[0]}")"; d="${pos[1]}"; mkdir -p "${d}"
            if [ -d "${s}" ]; then cp -r "${s}/." "${d}/"; else cp "${s}" "${d}/"; fi ;;
   sync)    s="$(resolve "${pos[0]}")"; d="${pos[1]}"; mkdir -p "${d}"
@@ -456,5 +471,170 @@ local_cfg "${LZIP}"
 check "probe local export mentioned"         bash -c "'${TMP}/ddp-probe.sh' local | grep -qi 'export'"
 local_cfg "${TMP}/no-such-folder"
 check "probe local missing fails"            bash -c "! '${TMP}/ddp-probe.sh' local"
+
+# ---- 10. analysis database declared: only the database, only when changed -----
+# With analyses.database enabled, a refresh fetches that one file (no
+# donations, no transcript tars), swaps it in by rename (never a partial file
+# in place), and skips the download while the remote listing is unchanged.
+DBLOCAL="${TMP}/study-with-db"
+db_cfg() { # db_cfg <mode> <path> [enabled]: instance.json declaring the database
+  local lp=null; [ "$1" = local ] && lp="\"${DBLOCAL}\""
+  printf '{"study_name":"example","source_mode":"%s","local_path":%s,"cadence":"off","default_n":15,"analyses":{"database":{"enabled":%s,"path":"%s"}}}\n' \
+    "$1" "${lp}" "${3:-true}" "$2" > "${ROOT}/config/instance.json"
+}
+status_is() { [ "$(jq -r "$1" "${ROOT}/state/refresh-status.json")" = "$2" ]; }
+message_has() { jq -r .message "${ROOT}/state/refresh-status.json" | grep -qF -- "$1"; }
+no_db_staging() { ! ls -A "${ROOT}/data/analyses" | grep -q '^\.'; }
+run_refresh() { touch "${ROOT}/state/refresh-requested"; "${TMP}/ddp-refresh.sh"; }
+ADB="${ROOT}/data/analyses/analysis.sqlite"
+DBREMOTE="${ROOT}/state/analysis-db.remote"
+
+# 10a. yoda: the study folder also holds inbox/, donations/ and transcript tars
+cp "${TMP}/source.good.json" "${ROOT}/config/source.json"
+mkdir -p "${FAKE_REMOTE}/coll/inbox" "${FAKE_REMOTE}/coll/donations" "${FAKE_REMOTE}/coll/analysis"
+echo '{}' > "${FAKE_REMOTE}/coll/inbox/donor1.json"
+(cd "${TMP}/zx/new" && zip -qr "${FAKE_REMOTE}/coll/donations/20260728_study.zip" 20260728_study)
+check "db yoda: transcript tars still on the remote" test -f "${FAKE_REMOTE}/coll/transcripts-tars/shard-42.tar"
+RDB="${FAKE_REMOTE}/coll/analysis/analysis.sqlite"
+printf 'database-v1' > "${RDB}"; touch -d @1700000000 "${RDB}"
+db_cfg yoda analysis/analysis.sqlite
+rm -rf "${ROOT}/data/inbox"; mkdir -p "${ROOT}/data/inbox"
+: > "${FAKE_GOCMD_LOG}"; export FAKE_PHP_COUNT=3
+check "db yoda: run succeeds"                run_refresh
+check "db yoda: database in place"           grep -qx database-v1 "${ADB}"
+check "db yoda: a real file, not a link"     bash -c "[ -f '${ADB}' ] && [ ! -L '${ADB}' ]"
+check "db yoda: no staging left"             no_db_staging
+check "db yoda: only the database fetched"   bash -c "[ \"\$(grep -c ' get ' '${FAKE_GOCMD_LOG}')\" = 1 ] && grep -q ' get .*i:/coll/analysis/analysis.sqlite' '${FAKE_GOCMD_LOG}'"
+check "db yoda: no donations or tars touched" bash -c "! grep -Eq 'donations|transcripts|/inbox' '${FAKE_GOCMD_LOG}'"
+check "db yoda: inbox untouched"             bash -c "[ -z \"\$(ls -A '${ROOT}/data/inbox')\" ]"
+check "db yoda: phase done"                  status_is .phase done
+check "db yoda: count from the warm-up"      status_is .donations 3
+check "db yoda: remote listing stored"       grep -q analysis.sqlite "${DBREMOTE}"
+
+# 10b. unchanged remote: no download
+: > "${FAKE_GOCMD_LOG}"
+check "db unchanged: run succeeds"           run_refresh
+check "db unchanged: not fetched again"      bash -c "! grep -q ' get ' '${FAKE_GOCMD_LOG}'"
+check "db unchanged: status says up to date" message_has "The analysis database is up to date."
+check "db unchanged: log says up to date"    grep -q "up to date" "${ROOT}/state/refresh.log"
+check "db unchanged: phase done"             status_is .phase done
+check "db unchanged: database kept"          grep -qx database-v1 "${ADB}"
+
+# 10c. touched remote (same size, new mtime): fetched again
+printf 'database-v2' > "${RDB}"; touch -d @1700000100 "${RDB}"
+: > "${FAKE_GOCMD_LOG}"
+check "db touched: run succeeds"             run_refresh
+check "db touched: fetched again"            grep -q ' get .*analysis.sqlite' "${FAKE_GOCMD_LOG}"
+check "db touched: new database in place"    grep -qx database-v2 "${ADB}"
+check "db touched: not reported up to date"  bash -c "! jq -r .message '${ROOT}/state/refresh-status.json' | grep -q 'up to date'"
+check "db touched: no staging left"          no_db_staging
+
+# 10d. local copy gone, remote unchanged: fetched again
+rm -f "${ADB}"; : > "${FAKE_GOCMD_LOG}"
+check "db missing here: run succeeds"        run_refresh
+check "db missing here: fetched again"       grep -q ' get .*analysis.sqlite' "${FAKE_GOCMD_LOG}"
+check "db missing here: database in place"   grep -qx database-v2 "${ADB}"
+
+# 10e. download stops partway: old database kept, nothing half-written left
+printf 'database-v3' > "${RDB}"; touch -d @1700000200 "${RDB}"
+cp "${DBREMOTE}" "${TMP}/db-remote.before"
+touch "${ROOT}/state/refresh-requested"
+FAKE_GOCMD_GET_FAIL=1 "${TMP}/ddp-refresh.sh" || true
+check "db partway: phase error"              status_is .phase error
+check "db partway: says stopped partway"     message_has "stopped partway"
+check "db partway: old database kept"        grep -qx database-v2 "${ADB}"
+check "db partway: no staging left"          no_db_staging
+check "db partway: listing not stored"       cmp -s "${DBREMOTE}" "${TMP}/db-remote.before"
+check "db partway: next run fetches"         run_refresh
+check "db partway: then the new database"    grep -qx database-v3 "${ADB}"
+
+# 10f. declared path missing on the remote: plain-language error naming it
+db_cfg yoda analysis/missing.sqlite
+touch "${ROOT}/state/refresh-requested"; "${TMP}/ddp-refresh.sh" || true
+check "db yoda missing: phase error"         status_is .phase error
+check "db yoda missing: names the path"      message_has "The analysis database was not found at analysis/missing.sqlite in the study folder. Check the path in Settings."
+check "db yoda missing: database kept"       grep -qx database-v3 "${ADB}"
+
+# 10g. warm-up failing in database mode: done, but no file count from the inbox
+db_cfg yoda analysis/analysis.sqlite
+echo '{}' > "${ROOT}/data/inbox/stale.json"
+touch "${ROOT}/state/refresh-requested"
+FAKE_PHP_FAIL=1 "${TMP}/ddp-refresh.sh" || true
+check "db warm-up failing: phase done"       status_is .phase done
+check "db warm-up failing: no inbox count"   status_is .donations null
+rm -f "${ROOT}/data/inbox/stale.json"
+
+# 10h. declared but switched off: the usual donation flow
+db_cfg yoda analysis/analysis.sqlite false
+: > "${FAKE_GOCMD_LOG}"
+check "db off: run succeeds"                 run_refresh
+check "db off: donations fetched"            test -f "${ROOT}/data/inbox/donor1.json"
+check "db off: database not fetched"         bash -c "! grep -q 'analysis.sqlite' '${FAKE_GOCMD_LOG}'"
+
+# 10i. rd-link: only that path is listed and copied
+RD_KEEP="${FAKE_RD}"
+export FAKE_RD="${TMP}/rd-db"
+mkdir -p "${FAKE_RD}/analysis" "${FAKE_RD}/inbox" "${FAKE_RD}/donations"
+echo '{}' > "${FAKE_RD}/inbox/assignment=1_task=2_participant=p7_source=tiktok_key=7-tiktok.json"
+(cd "${TMP}/zx/new" && zip -qr "${FAKE_RD}/donations/20260728_study.zip" 20260728_study)
+printf 'rd-database-v1' > "${FAKE_RD}/analysis/analysis.sqlite"; touch -d @1700000000 "${FAKE_RD}/analysis/analysis.sqlite"
+cat > "${ROOT}/config/source.json" <<'J'
+{"mode":"rd-link","webdav_url":"https://researchdrive.example/public.php/webdav/","share_token":"abc123","password":"pw"}
+J
+db_cfg rd-link analysis/analysis.sqlite
+rm -rf "${ROOT}/data/inbox"; mkdir -p "${ROOT}/data/inbox"
+: > "${FAKE_RCLONE_LOG}"
+check "db rd-link: run succeeds"             run_refresh
+check "db rd-link: database in place"        grep -qx rd-database-v1 "${ADB}"
+check "db rd-link: listed with lsl"          grep -q '^rclone lsl :webdav:analysis/analysis.sqlite ' "${FAKE_RCLONE_LOG}"
+check "db rd-link: only that path copied"    bash -c "[ \"\$(grep -c '^rclone copy' '${FAKE_RCLONE_LOG}')\" = 1 ] && grep -q '^rclone copy :webdav:analysis/analysis.sqlite ' '${FAKE_RCLONE_LOG}'"
+check "db rd-link: no donations pulled"      bash -c "! grep -Eq '^rclone sync|donations|inbox' '${FAKE_RCLONE_LOG}'"
+check "db rd-link: inbox untouched"          bash -c "[ -z \"\$(ls -A '${ROOT}/data/inbox')\" ]"
+check "db rd-link: no staging left"          no_db_staging
+check "db rd-link: phase done"               status_is .phase done
+: > "${FAKE_RCLONE_LOG}"
+check "db rd-link unchanged: run succeeds"   run_refresh
+check "db rd-link unchanged: no copy"        bash -c "! grep -q '^rclone copy' '${FAKE_RCLONE_LOG}'"
+check "db rd-link unchanged: up to date"     message_has "The analysis database is up to date."
+printf 'rd-database-v2' > "${FAKE_RD}/analysis/analysis.sqlite"; touch -d @1700000100 "${FAKE_RD}/analysis/analysis.sqlite"
+check "db rd-link touched: run succeeds"     run_refresh
+check "db rd-link touched: new database"     grep -qx rd-database-v2 "${ADB}"
+db_cfg rd-link analysis/missing.sqlite
+touch "${ROOT}/state/refresh-requested"; "${TMP}/ddp-refresh.sh" || true
+check "db rd-link missing: phase error"      status_is .phase error
+check "db rd-link missing: names the path"   message_has "not found at analysis/missing.sqlite"
+export FAKE_RD="${RD_KEEP}"
+
+# 10j. local: the database is a symlink to the folder's file, never a copy
+mkdir -p "${DBLOCAL}/analysis" "${DBLOCAL}/inbox"
+printf 'local-db' > "${DBLOCAL}/analysis/analysis.sqlite"
+printf 'local-other' > "${DBLOCAL}/analysis/other.sqlite"
+echo '{}' > "${DBLOCAL}/inbox/assignment=1_task=2_participant=p8_source=tiktok_key=8-tiktok.json"
+snap "${DBLOCAL}" > "${TMP}/dblocal.before"
+db_cfg local analysis/analysis.sqlite
+check "db local: run succeeds"               run_refresh
+check "db local: database links to the file" bash -c "[ -L '${ADB}' ] && [ \"\$(readlink '${ADB}')\" = '${DBLOCAL}/analysis/analysis.sqlite' ]"
+check "db local: inbox not linked"           bash -c "[ ! -L '${ROOT}/data/inbox' ]"
+check "db local: phase done"                 status_is .phase done
+check "db local: no staging left"            no_db_staging
+db_cfg local analysis/other.sqlite
+check "db local re-point: run succeeds"      run_refresh
+check "db local re-point: link retargeted"   bash -c "[ \"\$(readlink '${ADB}')\" = '${DBLOCAL}/analysis/other.sqlite' ]"
+db_cfg local analysis/missing.sqlite
+touch "${ROOT}/state/refresh-requested"; "${TMP}/ddp-refresh.sh" || true
+check "db local missing: phase error"        status_is .phase error
+check "db local missing: names the path"     message_has "not found at analysis/missing.sqlite"
+check "db local: folder untouched"           bash -c "snap() { find \"\$1\" -printf '%p %s %T@ %m\n' | sort; }; snap '${DBLOCAL}' | cmp -s - '${TMP}/dblocal.before'"
+
+# 10k. local -> yoda: the link is replaced by a download, never written through
+db_cfg local analysis/analysis.sqlite; run_refresh >/dev/null 2>&1
+cp "${TMP}/source.good.json" "${ROOT}/config/source.json"
+db_cfg yoda analysis/analysis.sqlite
+: > "${FAKE_GOCMD_LOG}"
+check "db local->yoda: run succeeds"         run_refresh
+check "db local->yoda: fetched"              grep -q ' get .*analysis.sqlite' "${FAKE_GOCMD_LOG}"
+check "db local->yoda: a real file now"      bash -c "[ -f '${ADB}' ] && [ ! -L '${ADB}' ] && grep -qx database-v3 '${ADB}'"
+check "db local->yoda: folder untouched"     bash -c "snap() { find \"\$1\" -printf '%p %s %T@ %m\n' | sort; }; snap '${DBLOCAL}' | cmp -s - '${TMP}/dblocal.before'"
+unset FAKE_PHP_COUNT
 
 echo; [ "${FAIL}" -eq 0 ] && echo "ALL PASS" || { echo "${FAIL} FAILURES"; exit 1; }
