@@ -90,6 +90,18 @@ case "${cmd}" in
 esac
 FAKE
 chmod +x "${TMP}/bin/rclone"
+
+# fake php: records the call and prints FAKE_PHP_COUNT as the count; unset or
+# FAKE_PHP_FAIL=1 = the warm-up fails (the other tests rely on the file-count fallback).
+export FAKE_PHP_LOG="${TMP}/php.log"; : > "${FAKE_PHP_LOG}"
+cat > "${TMP}/bin/php" <<'FAKE'
+#!/usr/bin/env bash
+echo "php $*" >> "${FAKE_PHP_LOG}"
+[ "${FAKE_PHP_FAIL:-0}" = "1" ] || [ -z "${FAKE_PHP_COUNT:-}" ] && { echo "boom" >&2; exit 1; }
+echo "warming…"
+echo "${FAKE_PHP_COUNT}"
+FAKE
+chmod +x "${TMP}/bin/php"
 export PATH="${TMP}/bin:${PATH}"
 
 render() { # render <template> <dest>
@@ -97,6 +109,7 @@ render() { # render <template> <dest>
     -a "src=${TPL}/$1 dest=$2 mode=0755" \
     -e "inspector_root=${ROOT}" \
     -e "gocmd_bin=gocmd" -e "rclone_bin=rclone" \
+    -e "inspector_php_bin=${TMP}/bin/php" -e "inspector_install_dir=/opt/ddp-inspector" \
     >/dev/null
 }
 render ddp-refresh.sh.j2 "${TMP}/ddp-refresh.sh"
@@ -135,6 +148,22 @@ check "yoda: donations counted"              bash -c "[ \"\$(jq -r .donations '$
 check "yoda: config written as pasted"      bash -c "[ \"\$(jq -r '.irods_host + \" \" + .irods_user_name' '${FAKE_GOCMD_ENV_COPY}')\" = 'yoda.example r@uu.nl' ]"
 check "yoda: DAP never in gocmd argv"        bash -c "! grep -q dap-secret '${FAKE_GOCMD_LOG}'"
 check "yoda: DAP never in the config file"   bash -c "! grep -q dap-secret '${FAKE_GOCMD_ENV_COPY}'"
+
+# ---- 2b. cache warm-up: the php shim's last line is the donation count ---------
+export FAKE_PHP_COUNT=7
+touch "${ROOT}/state/refresh-requested"; "${TMP}/ddp-refresh.sh" >/dev/null 2>&1
+check "warm-up: shim called with the install path" grep -q "php /opt/ddp-inspector/bin/warm-cache.php" "${FAKE_PHP_LOG}"
+check "warm-up: donations come from the warm-up"  bash -c "[ \"\$(jq -r .donations '${ROOT}/state/refresh-status.json')\" = 7 ]"
+check "warm-up: phase done"                       bash -c "[ \"\$(jq -r .phase '${ROOT}/state/refresh-status.json')\" = done ]"
+touch "${ROOT}/state/refresh-requested"
+export FAKE_PHP_FAIL=1
+check "warm-up failing: run still succeeds"       "${TMP}/ddp-refresh.sh"
+check "warm-up failing: phase still done"         bash -c "[ \"\$(jq -r .phase '${ROOT}/state/refresh-status.json')\" = done ]"
+check "warm-up failing: falls back to file count" bash -c "[ \"\$(jq -r .donations '${ROOT}/state/refresh-status.json')\" = 1 ]"
+touch "${ROOT}/state/refresh-requested"
+"${TMP}/ddp-refresh.sh" >/dev/null 2>&1
+check "warm-up failing: logged"                   grep -q "cache warm-up failed" "${ROOT}/state/refresh.log"
+unset FAKE_PHP_FAIL FAKE_PHP_COUNT
 
 # ---- 3. yoda login rejected (expired DAP): error status, no data touched ------
 rm -rf "${ROOT}/data/inbox"; mkdir -p "${ROOT}/data/inbox"

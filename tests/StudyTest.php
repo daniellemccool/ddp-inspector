@@ -375,6 +375,22 @@ eq(count($p2['platforms']['instagram']['notes'] ?? []), 1, 'raw: superseded dona
 check(str_contains($p2['platforms']['instagram']['notes'][0] ?? '', 'donated more than once for this platform')
       && str_contains($p2['platforms']['instagram']['notes'][0] ?? '', '(1 older file(s) ignored)'), 'raw: superseded note text');
 
+
+// ---- bin/warm-cache.php: warms the participant-list cache, prints the donation count ----
+$GLOBALS['__cfg'] = ['storage_root' => $sc, 'default_n' => 15, 'base_path' => ''];
+inst_save($base + ['analyses' => ['database' => ['enabled' => true, 'path' => 'analysis.sqlite']]]);
+study_test_build_db($dbfile);
+study_reset();
+exec('rm -rf ' . escapeshellarg("$sc/cache/study"));
+$wcCfg = "$sc/warm-config.php";
+file_put_contents($wcCfg, "<?php return " . var_export(['storage_root' => $sc, 'default_n' => 15, 'base_path' => ''], true) . ";\n");
+$wcOut = []; $wcRc = -1;
+exec('DDP_INSPECTOR_CONFIG=' . escapeshellarg($wcCfg) . ' ' . escapeshellarg(PHP_BINARY) . ' '
+     . escapeshellarg(__DIR__ . '/../bin/warm-cache.php') . ' 2>&1', $wcOut, $wcRc);
+eq($wcRc, 0, 'warm-cache: exits 0');
+eq(trim((string)end($wcOut)), '3', 'warm-cache: last stdout line is the donation count');
+eq(count(glob("$sc/cache/study/participants-*.json")), 1, 'warm-cache: the participant-list cache file exists');
+@unlink($wcCfg);
 $GLOBALS['__cfg'] = $saved_study_cfg;
 study_reset();
 exec('rm -rf ' . escapeshellarg($sc));

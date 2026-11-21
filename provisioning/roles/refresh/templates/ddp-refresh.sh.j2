@@ -201,6 +201,13 @@ case "${MODE}" in
     ;;
 esac
 
-N="$(count_donations)"
+# Warm the participant-list cache so the first page view after a refresh is fast.
+# A failed warm-up never fails the refresh: fall back to counting the files.
+if N="$({{ inspector_php_bin | default('php') }} {{ inspector_install_dir }}/bin/warm-cache.php | tail -n 1)" && [[ "${N}" =~ ^[0-9]+$ ]]; then
+  :
+else
+  echo "[refresh] cache warm-up failed"
+  N="$(count_donations)"
+fi
 write_status done "$(date -u +%FT%TZ)" "${N}" "Found ${N} donation(s)."
 echo "[refresh] done: ${N} donation(s)"
