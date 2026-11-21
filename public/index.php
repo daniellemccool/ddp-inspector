@@ -38,18 +38,7 @@ if ($skipKinds['declined_consent']) { $skipBits[] = $skipKinds['declined_consent
 // once headers are sent — see Task 10 carry-forward constraint).
 if ($storageMode) { csrf_token(); }
 ?>
-<!doctype html>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>DDP Inspector — participants</title>
-<link rel="stylesheet" href="<?= h(asset_url('assets/style.css')) ?>">
-<main class="wrap">
-  <header class="site">
-    <a class="wordmark" href="<?= h(url('index.php')) ?>">DDP Inspector</a>
-    <?php if ($storageMode): ?>
-      <nav class="crumbs"><a href="<?= h(url('setup.php')) ?>">Settings</a></nav>
-    <?php endif; ?>
-  </header>
+<?php page_top('participants', 'participants'); ?>
   <h1>Participants</h1>
   <?php if ($notice !== null): ?><p class="notice"><?= h($notice) ?></p><?php endif; ?>
   <?php if ($storageMode): ?>
@@ -63,17 +52,17 @@ if ($storageMode) { csrf_token(); }
         echo implode(' · ', $metaBits); ?></p>
       <form method="post" action="<?= h(url('setup.php')) ?>">
         <?= csrf_field() ?><input type="hidden" name="action" value="refresh_now">
-        <button>Check for new donations</button>
+        <button>Check for new donations<?= go_mark() ?></button>
       </form>
     </div>
     <?php if ($status['phase'] === 'error'): ?>
-      <p class="skipped"><?= h((string)$status['message']) ?></p>
+      <p class="warn"><?= h((string)$status['message']) ?></p>
     <?php endif; ?>
   <?php endif; ?>
   <?php if ($notice === null): ?>
   <?php if ($loaded['skipped']): ?>
     <details class="skipped">
-      <summary>⚠ <?= count($loaded['skipped']) ?> <?= study_mode() === 'database' ? '' : 'file(s) ' ?>set aside — <?= h(implode(', ', $skipBits)) ?></summary>
+      <summary><?= count($loaded['skipped']) ?> <?= study_mode() === 'database' ? '' : 'file(s) ' ?>set aside — <?= h(implode(', ', $skipBits)) ?></summary>
       <ul>
       <?php foreach ($loaded['skipped'] as $s): ?>
         <li><?= h($s['participant']) ?> — <?= h(match ($s['kind']) { 'declined' => 'declined to donate', 'empty' => 'empty upload', 'not_donated' => 'consented, did not donate', 'declined_consent' => 'declined consent', default => 'unreadable file' }) ?>
@@ -94,8 +83,8 @@ if ($storageMode) { csrf_token(); }
         ? 'No participants with transcripts yet — transcription may still be running.'
         : 'No donations yet. Once participants donate (and a fetch has run), they appear here.' ?></p>
   <?php else: ?>
-  <table class="scope">
-    <thead><tr><th>participant</th><th>platforms</th><th>total rows</th><th>transcribed videos</th><th>earliest</th><th>latest</th></tr></thead>
+  <table class="participants">
+    <thead><tr><th>Participant</th><th>Platforms</th><th class="num">Total rows</th><th class="num">Transcribed videos</th><th>Earliest</th><th>Latest</th></tr></thead>
     <tbody>
     <?php foreach ($rows as $p):
         $total = 0; $earliest = null; $latest = null; $plats = [];

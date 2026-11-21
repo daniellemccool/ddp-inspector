@@ -18,21 +18,13 @@ if ($notice === null && $participant === null) {
 }
 $id = $participant['id'] ?? $id;
 ?>
-<!doctype html>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>DDP Inspector — <?= h($id) ?></title>
-<link rel="stylesheet" href="<?= h(asset_url('assets/style.css')) ?>">
-<main class="wrap">
-  <header class="site">
-    <a class="wordmark" href="<?= h(url('index.php')) ?>">DDP Inspector</a>
-    <nav class="crumbs"><a href="<?= h(url('index.php')) ?>">← all participants</a></nav>
-  </header>
-  <h1>Participant <span class="id"><?= h($id) ?></span></h1>
+<?php page_top($id, 'participants'); ?>
+  <h1><span class="eyebrow">Participant</span> <span class="id"><?= h($id) ?></span></h1>
   <?php if ($notice !== null): ?><p class="notice"><?= h($notice) ?></p><?php else: ?>
-  <p class="samplesize">sample size:
+  <div class="controls">
+  <p class="samplesize"><span class="samplesize__label">Rows per table</span>
     <?php foreach ([10, 15, 20, 50] as $opt): ?>
-      <a href="<?= h(url('participant.php?id=' . rawurlencode($id) . '&n=' . $opt . '&seed=' . $seed . ($showAllRows ? '&all=1' : ''))) ?>"<?= $opt === $n ? ' class="cur"' : '' ?>><?= $opt ?></a>
+      <a href="<?= h(url('participant.php?id=' . rawurlencode($id) . '&n=' . $opt . '&seed=' . $seed . ($showAllRows ? '&all=1' : ''))) ?>"<?= $opt === $n ? ' class="cur" aria-current="true"' : '' ?>><?= $opt ?></a>
     <?php endforeach; ?>
   </p>
   <p class="meta"><?php if (!$showAllRows): ?>
@@ -42,6 +34,7 @@ $id = $participant['id'] ?? $id;
     Showing all rows, including untranscribed videos —
     <a href="<?= h(url('participant.php?id=' . rawurlencode($id) . '&n=' . $n . '&seed=' . $seed)) ?>">hide untranscribed</a>
   <?php endif; ?></p>
+  </div>
 
   <?php foreach ($participant['platforms'] as $platform):
       // Tables without rows have no section; they can never match a flow doc,
@@ -49,10 +42,10 @@ $id = $participant['id'] ?? $id;
       $titles = array_column($platform['sections'], 'title', 'key'); ?>
     <h2><?= h($platform['title']) ?></h2>
     <?php foreach ($platform['notes'] as $note): ?>
-      <p class="skipped"><?= h($note) ?></p>
+      <p class="notice"><?= h($note) ?></p>
     <?php endforeach; ?>
     <table class="scope">
-      <thead><tr><th>table</th><th>rows</th><th>earliest</th><th>latest</th></tr></thead>
+      <thead><tr><th>Table</th><th class="num">Rows</th><th>Earliest</th><th>Latest</th></tr></thead>
       <tbody>
       <?php foreach ($platform['scope'] as $name => $s): ?>
         <tr><td><?= h($titles[$name] ?? flows_prettify((string)$name)) ?></td><td class="num"><?= number_format($s['count']) ?></td>
