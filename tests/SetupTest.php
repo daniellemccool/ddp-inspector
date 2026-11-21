@@ -17,36 +17,67 @@ $r = inst_handle_setup_post(['action' => 'upload_flow', 'csrf' => csrf_token()],
 eq($r['flash'][0]['kind'], 'ok', 'flow upload accepted');
 check(str_contains($r['flash'][0]['text'], 'TikTok'), 'upload confirmation names platform');
 
+// Yoda: the researcher's own configuration (pasted or uploaded, JSON or the
+// GoCommands YAML, exactly as the Yoda portal offers it) + data access password.
+$cfgJson = '{"irods_host": "lp0555.its.uu.nl", "irods_port": 1247, "irods_home": "/nluu10p/home",'
+    . ' "irods_user_name": "r@uu.nl", "irods_zone_name": "nluu10p", "irods_default_resource": "irodsResc",'
+    . ' "irods_authentication_scheme": "pam_password", "irods_encryption_algorithm": "AES-256-CBC",'
+    . ' "irods_encryption_key_size": 32, "irods_client_server_policy": "CS_NEG_REQUIRE"}';
 $r = inst_handle_setup_post(['action' => 'save_source', 'csrf' => csrf_token(),
     'source_mode' => 'yoda', 'study_name' => 'Crime study',
-    'collection' => '/nluu10p/home/research-x', 'access_code' => 'TICKET123'], []);
+    'collection' => '/nluu10p/home/research-x', 'irods_config' => $cfgJson, 'yoda_password' => 'DAP123'], []);
 eq($r['flash'][0]['kind'], 'ok', 'yoda source saved');
 eq(inst_load()['source_mode'], 'yoda', 'instance saved');
-eq(inst_source_load()['ticket'], 'TICKET123', 'ticket stored');
+eq(inst_source_load()['password'], 'DAP123', 'data access password stored');
+eq(inst_source_load()['env']['irods_host'] ?? null, 'lp0555.its.uu.nl', 'pasted config stored as-is (host)');
+eq(inst_source_load()['env']['irods_default_resource'] ?? null, 'irodsResc', 'pasted config stored as-is (resource)');
+check(!isset(inst_source_load()['env']['irods_user_password']), 'no password inside the stored config');
 
-// Re-saving "About your study" (e.g. a new study name) with the access-code
-// field left blank keeps the saved ticket — the field shows "saved ✓".
+// The page shows the saved configuration (not secret) but never the DAP.
+$_POST = [];
+$html = render_page('setup.php', []);
+check(str_contains($html, 'r@uu.nl'), 'saved configuration shown in the paste box');
+check(!str_contains($html, 'DAP123'), 'data access password never echoed');
+
+// Re-saving "About your study" (e.g. a new study name) with the config box
+// and password left blank keeps both — the password field shows "saved ✓".
 $r = inst_handle_setup_post(['action' => 'save_source', 'csrf' => csrf_token(),
     'source_mode' => 'yoda', 'study_name' => 'Crime study (renamed)',
-    'collection' => '/nluu10p/home/research-x', 'access_code' => ''], []);
-eq($r['flash'][0]['kind'], 'ok', 'yoda re-save with blank access code accepted');
+    'collection' => '/nluu10p/home/research-x', 'irods_config' => '', 'yoda_password' => ''], []);
+eq($r['flash'][0]['kind'], 'ok', 'yoda re-save with blank config and password accepted');
 eq(inst_load()['study_name'], 'Crime study (renamed)', 'study name updated on re-save');
-eq(inst_source_load()['ticket'], 'TICKET123', 'blank access code keeps the saved ticket');
+eq(inst_source_load()['password'], 'DAP123', 'blank password keeps the saved DAP');
+eq(inst_source_load()['env']['irods_user_name'] ?? null, 'r@uu.nl', 'blank config box keeps the saved config');
 
-// A corrected folder path keeps the ticket too (a collection ticket covers
-// its sub-collections; Check & fetch catches a ticket that does not fit).
-$r = inst_handle_setup_post(['action' => 'save_source', 'csrf' => csrf_token(),
-    'source_mode' => 'yoda', 'study_name' => 'Crime study (renamed)',
-    'collection' => '/nluu10p/home/research-x/sub', 'access_code' => ''], []);
-eq($r['flash'][0]['kind'], 'ok', 'yoda path change with blank access code accepted');
-eq(inst_source_load()['collection'], '/nluu10p/home/research-x/sub', 'collection updated');
-eq(inst_source_load()['ticket'], 'TICKET123', 'path change keeps the saved ticket');
-
-// A typed access code still replaces the saved one.
+// An uploaded YAML file (the portal's "Download as YAML") wins over the box;
+// same user, so a blank password still keeps the saved DAP.
+$yml = $scratch2 . '-config.yml';
+file_put_contents($yml, "irods_host: \"lp0555.its.uu.nl\"\nirods_port: 1247\nirods_home: \"/nluu10p/home\"\n"
+    . "irods_user_name: \"r@uu.nl\"\nirods_zone_name: \"nluu10p\"\nirods_authentication_scheme: \"pam_password\"\n"
+    . "irods_encryption_key_size: 32\n");
 $r = inst_handle_setup_post(['action' => 'save_source', 'csrf' => csrf_token(),
     'source_mode' => 'yoda', 'study_name' => 'Crime study',
-    'collection' => '/nluu10p/home/research-x', 'access_code' => 'TICKET456'], []);
-eq(inst_source_load()['ticket'], 'TICKET456', 'new access code replaces the saved ticket');
+    'collection' => '/nluu10p/home/research-x', 'irods_config' => '{"not": "used"}', 'yoda_password' => ''],
+    ['irods_config_file' => ['tmp_name' => $yml, 'error' => UPLOAD_ERR_OK]]);
+eq($r['flash'][0]['kind'], 'ok', 'uploaded YAML config accepted');
+eq(inst_source_load()['env']['irods_port'] ?? null, 1247, 'uploaded YAML parsed (port is an int)');
+check(!isset(inst_source_load()['env']['irods_default_resource']), 'upload replaced the saved config');
+eq(inst_source_load()['password'], 'DAP123', 'same user: blank password keeps the saved DAP');
+
+// A configuration for a DIFFERENT user needs its own password.
+$r = inst_handle_setup_post(['action' => 'save_source', 'csrf' => csrf_token(),
+    'source_mode' => 'yoda', 'study_name' => 'Crime study',
+    'collection' => '/nluu10p/home/research-x',
+    'irods_config' => str_replace('r@uu.nl', 'other@uu.nl', $cfgJson), 'yoda_password' => ''], []);
+eq($r['flash'][0]['kind'], 'error', 'new user with blank password rejected');
+eq(inst_source_load()['env']['irods_user_name'] ?? null, 'r@uu.nl', 'rejected save leaves the saved config alone');
+
+// An incomplete paste is rejected with a pointer to the portal.
+$r = inst_handle_setup_post(['action' => 'save_source', 'csrf' => csrf_token(),
+    'source_mode' => 'yoda', 'study_name' => 'Crime study',
+    'collection' => '/nluu10p/home/research-x', 'irods_config' => '{"irods_host": "x"}', 'yoda_password' => 'D'], []);
+eq($r['flash'][0]['kind'], 'error', 'incomplete config rejected');
+check(str_contains($r['flash'][0]['text'], 'Yoda portal'), 'incomplete config points at the Yoda portal');
 
 $r = inst_handle_setup_post(['action' => 'save_source', 'csrf' => csrf_token(),
     'source_mode' => 'rd-link', 'study_name' => 'RD study',
@@ -69,11 +100,11 @@ $r = inst_handle_setup_post(['action' => 'save_source', 'csrf' => csrf_token(),
 eq($r['flash'][0]['kind'], 'error', 'new share link with blank password rejected');
 eq(inst_source_load()['share_token'], 'AbCdEf123', 'rejected save leaves the saved link alone');
 
-// Switching rd-link -> yoda with a blank access code: nothing to keep.
+// Switching rd-link -> yoda with a blank config and password: nothing to keep.
 $r = inst_handle_setup_post(['action' => 'save_source', 'csrf' => csrf_token(),
     'source_mode' => 'yoda', 'study_name' => 'RD study',
-    'collection' => '/nluu10p/home/research-x', 'access_code' => ''], []);
-eq($r['flash'][0]['kind'], 'error', 'switch to yoda with blank access code rejected');
+    'collection' => '/nluu10p/home/research-x', 'irods_config' => '', 'yoda_password' => ''], []);
+eq($r['flash'][0]['kind'], 'error', 'switch to yoda without a configuration rejected');
 eq(inst_source_load()['mode'], 'rd-link', 'rejected switch leaves the saved source alone');
 
 $r = inst_handle_setup_post(['action' => 'save_source', 'csrf' => csrf_token(),
@@ -91,13 +122,12 @@ eq($r['flash'][0]['kind'], 'error', 'bad csrf rejected');
 // Page renders: no secret echo, flows listed, status shown.
 inst_write_json_atomic("$scratch2/state/refresh-status.json",
     ['phase' => 'error', 'started_at' => null, 'finished_at' => null, 'donations' => null,
-     'message' => 'Your access code has expired — ask your data manager for a new one.']);
+     'message' => 'Yoda did not accept your username and data access password.']);
 $_POST = [];
 $html = render_page('setup.php', []);
-check(!str_contains($html, 'TICKET123'), 'ticket never echoed');
 check(!str_contains($html, '>pw<'), 'password never echoed');
 check(str_contains($html, 'TikTok'), 'uploaded flow listed');
-check(str_contains($html, 'access code has expired'), 'status message rendered');
+check(str_contains($html, 'did not accept your username'), 'status message rendered');
 check(str_contains($html, 'Technical log'), 'log details present');
 
 $GLOBALS['__cfg'] = $GLOBALS['__cfg_saved_setup'];

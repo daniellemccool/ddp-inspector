@@ -24,19 +24,27 @@ export FAKE_GOCMD_LOG="${TMP}/gocmd.log"; : > "${FAKE_GOCMD_LOG}"
 export FAKE_RCLONE_LOG="${TMP}/rclone.log"; : > "${FAKE_RCLONE_LOG}"
 export FAKE_RD="${TMP}/rd"; mkdir -p "${FAKE_RD}"
 
-# fake gocmd: minimal ls/sync/get subset; honors -T (ticket) and -c (config
-# dir) by ignoring them; FAKE_GOCMD_FAIL=1 makes every op fail (bad ticket).
+# fake gocmd: minimal ls/sync/get subset that logs in like Yoda — the data
+# access password must arrive via IRODS_USER_PASSWORD (else "Authentication
+# failed", like the real server); a ticket (-T) is a hard error. It copies the
+# -c dir's irods_environment.json to FAKE_GOCMD_ENV_COPY for assertions.
+# FAKE_GOCMD_FAIL=1 = the server rejects the login (expired/revoked DAP).
+export FAKE_YODA_PASSWORD="dap-secret"
+export FAKE_GOCMD_ENV_COPY="${TMP}/gocmd-env-copy.json"
 mkdir -p "${TMP}/bin"
 cat > "${TMP}/bin/gocmd" <<'FAKE'
 #!/usr/bin/env bash
 set -euo pipefail
 echo "gocmd $*" >> "${FAKE_GOCMD_LOG}"
-[ "${FAKE_GOCMD_FAIL:-0}" = "1" ] && { echo "CAT_TICKET_INVALID" >&2; exit 1; }
+case " $* " in *" -T "*|*" --ticket "*) echo "unexpected ticket flag" >&2; exit 2;; esac
+if [ "${FAKE_GOCMD_FAIL:-0}" = "1" ] || [ "${IRODS_USER_PASSWORD:-}" != "${FAKE_YODA_PASSWORD}" ]; then
+  echo 'Authentication failed (auth scheme: "pam_password", username: "x", zone: "nluu10p")!' >&2; exit 1
+fi
 resolve() { case "$1" in i:*) printf '%s' "${FAKE_REMOTE}${1#i:}";; *) printf '%s' "$1";; esac; }
 args=(); cmd=""
 while [ $# -gt 0 ]; do
   case "$1" in
-    -T|-c|--ticket) shift 2 ;;
+    -c) cp "$2/irods_environment.json" "${FAKE_GOCMD_ENV_COPY}"; shift 2 ;;
     -*)             shift ;;
     *)  if [ -z "${cmd}" ]; then cmd="$1"; else args+=("$1"); fi; shift ;;
   esac
@@ -110,7 +118,7 @@ cat > "${ROOT}/config/instance.json" <<'J'
 {"study_name":"crime","source_mode":"yoda","local_path":null,"cadence":"off","default_n":15}
 J
 cat > "${ROOT}/config/source.json" <<'J'
-{"mode":"yoda","collection":"/coll","host":"fsw.data.uu.nl","zone":"nluu10p","ticket":"tkt123"}
+{"mode":"yoda","collection":"/coll","env":{"irods_host":"yoda.example","irods_port":1247,"irods_zone_name":"nluu10p","irods_user_name":"r@uu.nl","irods_authentication_scheme":"pam_password"},"password":"dap-secret"}
 J
 echo '{}' > "${FAKE_REMOTE}/coll/inbox/donor1.json"
 mkdir -p "${FAKE_REMOTE}/coll/transcripts-tars"
@@ -123,15 +131,27 @@ check "yoda: donation landed"                test -f "${ROOT}/data/inbox/donor1.
 check "yoda: transcript extracted"           test -f "${ROOT}/data/analyses/transcripts/42/7000000000000000042.txt"
 check "yoda: phase done"                     bash -c "[ \"\$(jq -r .phase '${ROOT}/state/refresh-status.json')\" = done ]"
 check "yoda: donations counted"              bash -c "[ \"\$(jq -r .donations '${ROOT}/state/refresh-status.json')\" = 1 ]"
-check "yoda: ticket used via -T"             grep -q -- '-T tkt123' "${FAKE_GOCMD_LOG}"
+check "yoda: config written as pasted"      bash -c "[ \"\$(jq -r '.irods_host + \" \" + .irods_user_name' '${FAKE_GOCMD_ENV_COPY}')\" = 'yoda.example r@uu.nl' ]"
+check "yoda: DAP never in gocmd argv"        bash -c "! grep -q dap-secret '${FAKE_GOCMD_LOG}'"
+check "yoda: DAP never in the config file"   bash -c "! grep -q dap-secret '${FAKE_GOCMD_ENV_COPY}'"
 
-# ---- 3. yoda invalid ticket: error status, no data touched --------------------
+# ---- 3. yoda login rejected (expired DAP): error status, no data touched ------
 rm -rf "${ROOT}/data/inbox"; mkdir -p "${ROOT}/data/inbox"
 touch "${ROOT}/state/refresh-requested"
 FAKE_GOCMD_FAIL=1 "${TMP}/ddp-refresh.sh" || true
-check "yoda bad ticket: phase error"         bash -c "[ \"\$(jq -r .phase '${ROOT}/state/refresh-status.json')\" = error ]"
-check "yoda bad ticket: plain-language msg"  bash -c "jq -r .message '${ROOT}/state/refresh-status.json' | grep -qi 'access code'"
-check "yoda bad ticket: inbox untouched"     bash -c "[ -z \"\$(ls -A '${ROOT}/data/inbox')\" ]"
+check "yoda bad login: phase error"          bash -c "[ \"\$(jq -r .phase '${ROOT}/state/refresh-status.json')\" = error ]"
+check "yoda bad login: says data access password" bash -c "jq -r .message '${ROOT}/state/refresh-status.json' | grep -qi 'data access password'"
+check "yoda bad login: inbox untouched"      bash -c "[ -z \"\$(ls -A '${ROOT}/data/inbox')\" ]"
+
+# ---- 3b. source.json from the old anonymous-ticket design: plain error ---------
+cp "${ROOT}/config/source.json" "${TMP}/source.good.json"
+echo '{"mode":"yoda","collection":"/coll","host":"fsw.data.uu.nl","zone":"nluu10p","ticket":"tkt123"}' > "${ROOT}/config/source.json"
+touch "${ROOT}/state/refresh-requested"
+"${TMP}/ddp-refresh.sh" || true
+check "legacy ticket config: phase error"    bash -c "[ \"\$(jq -r .phase '${ROOT}/state/refresh-status.json')\" = error ]"
+check "legacy ticket config: asks for config" bash -c "jq -r .message '${ROOT}/state/refresh-status.json' | grep -qi 'Yoda configuration'"
+check "legacy ticket config: gocmd not run"  bash -c "! grep -q -- '-T' '${FAKE_GOCMD_LOG}'"
+cp "${TMP}/source.good.json" "${ROOT}/config/source.json"
 
 # ---- 4. resume after interrupt: rerun completes -------------------------------
 touch "${ROOT}/state/refresh-requested"
@@ -279,9 +299,9 @@ check "timer+off: no new run recorded"       bash -c "[ \"\$(jq -r .started_at '
 
 # ---- 9. probe script ----------------------------------------------------------------
 cat > "${ROOT}/config/source.json" <<'J'
-{"mode":"yoda","collection":"/coll","host":"fsw.data.uu.nl","zone":"nluu10p","ticket":"tkt123"}
+{"mode":"yoda","collection":"/coll","env":{"irods_host":"yoda.example","irods_port":1247,"irods_zone_name":"nluu10p","irods_user_name":"r@uu.nl","irods_authentication_scheme":"pam_password"},"password":"dap-secret"}
 J
 check "probe yoda ok"                        "${TMP}/ddp-probe.sh" yoda
-check "probe yoda bad ticket fails"          bash -c "! FAKE_GOCMD_FAIL=1 '${TMP}/ddp-probe.sh' yoda"
+check "probe yoda bad login fails"           bash -c "! FAKE_GOCMD_FAIL=1 '${TMP}/ddp-probe.sh' yoda"
 
 echo; [ "${FAIL}" -eq 0 ] && echo "ALL PASS" || { echo "${FAIL} FAILURES"; exit 1; }

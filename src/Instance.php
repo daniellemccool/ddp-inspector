@@ -147,11 +147,14 @@ function inst_local_folder_candidates(string $scanRoot = '/data'): array {
     return array_values(array_unique($found));
 }
 
-/** @return array{code:int, out:string} */
-function inst_run(array $argv, int $timeoutSec): array {
+/** $extraEnv is added to the inherited environment (secrets go here, never
+ *  into $argv, where any local user could read them from the process list).
+ *  @return array{code:int, out:string} */
+function inst_run(array $argv, int $timeoutSec, array $extraEnv = []): array {
     $bin = $argv[0];
     if (!is_file($bin) && !inst_which($bin)) { return ['code' => 127, 'out' => '']; }
-    $proc = @proc_open($argv, [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
+    $env = $extraEnv === [] ? null : array_merge(getenv(), $extraEnv);
+    $proc = @proc_open($argv, [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, null, $env);
     if (!is_resource($proc)) { return ['code' => 127, 'out' => '']; }
     stream_set_blocking($pipes[1], false); stream_set_blocking($pipes[2], false);
     $out = ''; $deadline = time() + $timeoutSec;
@@ -199,9 +202,14 @@ function inst_probe(): array {
             return ['ok' => false, 'count' => null,
                     'message' => 'Connection test unavailable on this machine — you can still save and refresh.'];
         }
+        if (!is_array($src['env'] ?? null) || (string)($src['password'] ?? '') === '') {
+            return ['ok' => false, 'count' => null,
+                    'message' => 'Add your Yoda configuration (upload or paste) and data access password in step 2, then save.'];
+        }
         // gocmd's -c takes a config DIRECTORY holding irods_environment.json;
-        // the read ticket goes via -T and the path gets the i: prefix — the
-        // exact invocation the provisioning probe script uses (verified live).
+        // the data access password goes via IRODS_USER_PASSWORD (gocmd
+        // v0.12.2 reads it instead of prompting) and the path gets the i:
+        // prefix — the same invocation the provisioning scripts use.
         $dir = sys_get_temp_dir() . '/ddpi-gocfg-' . bin2hex(random_bytes(6));
         if (!@mkdir($dir, 0700)) {
             return ['ok' => false, 'count' => null,
@@ -209,12 +217,23 @@ function inst_probe(): array {
         }
         file_put_contents("$dir/irods_environment.json", inst_gocmd_config($src));
         @chmod("$dir/irods_environment.json", 0600);
-        $r = inst_run([$bin, '-c', $dir, '-T', (string)$src['ticket'],
-                       'ls', 'i:' . (string)$src['collection']], 15);
+        $r = inst_run([$bin, '-c', $dir, 'ls', 'i:' . (string)$src['collection']], 30,
+                      ['IRODS_USER_PASSWORD' => (string)$src['password']]);
         @unlink("$dir/irods_environment.json"); @rmdir($dir);
-        if ($r['code'] === 0) { return ['ok' => true, 'count' => null, 'message' => 'Connected ✓ — your access code works.']; }
+        if ($r['code'] === 0) { return ['ok' => true, 'count' => null, 'message' => 'Connected ✓ — Yoda accepted your login and the folder is readable.']; }
+        if ($r['code'] === -1) {
+            return ['ok' => false, 'count' => null, 'message' => 'Yoda did not answer in time. Try again in a few minutes.'];
+        }
+        if (stripos($r['out'], 'authentication failed') !== false) {
+            return ['ok' => false, 'count' => null,
+                    'message' => 'Yoda did not accept this username and data access password. Data access passwords expire — create a new one in the Yoda portal and paste it in step 2.'];
+        }
+        if (stripos($r['out'], 'failed to establish a connection') !== false) {
+            return ['ok' => false, 'count' => null,
+                    'message' => 'Could not reach Yoda from this workspace. This is usually temporary — try again in a few minutes.'];
+        }
         return ['ok' => false, 'count' => null,
-                'message' => 'Could not connect. Your access code may have expired — ask your data manager for a new one.'];
+                'message' => 'Logged in, but could not open that folder. Check the folder path — it is the full path, starting with /nluu10p/home/.'];
     }
     if ($mode === 'rd-link') {
         $bin = (string)cfg('rclone_bin', 'rclone');
@@ -284,12 +303,33 @@ function inst_handle_setup_post(array $post, array $files): array {
         $saved = inst_source_load() ?? [];
         if ($mode === 'yoda') {
             $collection = trim((string)($post['collection'] ?? ''));
-            $ticket = trim((string)($post['access_code'] ?? ''));
-            if ($ticket === '' && ($saved['mode'] ?? '') === 'yoda') { $ticket = (string)($saved['ticket'] ?? ''); }
-            if ($collection === '' || $ticket === '') { return $flash('error', 'Please fill in both the folder path and the access code your data manager gave you.'); }
+            $savedYoda = ($saved['mode'] ?? '') === 'yoda' && is_array($saved['env'] ?? null);
+            $configText = trim((string)($post['irods_config'] ?? ''));
+            // An uploaded .json (the portal's irods_environment.json) wins
+            // over the paste box. Small cap: a real one is under 1 KB.
+            $uf = $files['irods_config_file'] ?? null;
+            if (is_array($uf) && ($uf['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK
+                    && is_string($uf['tmp_name'] ?? null) && is_file($uf['tmp_name'])) {
+                $configText = trim((string)file_get_contents($uf['tmp_name'], false, null, 0, 65536));
+            }
+            if ($configText === '' && $savedYoda) {
+                $env = $saved['env'];
+            } else {
+                [$env, $err] = inst_parse_irods_env($configText);
+                if ($env === null) { return $flash('error', $err); }
+            }
+            $password = trim((string)($post['yoda_password'] ?? ''));
+            // A data access password belongs to one Yoda user: keep the saved
+            // one only while the configuration names that same user.
+            if ($password === '' && $savedYoda
+                    && ($saved['env']['irods_user_name'] ?? null) === $env['irods_user_name']) {
+                $password = (string)($saved['password'] ?? '');
+            }
+            if ($collection === '' || $password === '') {
+                return $flash('error', 'Please fill in the folder path and your data access password.');
+            }
             if (!inst_source_save(['mode' => 'yoda', 'collection' => $collection,
-                    'host' => trim((string)($post['host'] ?? '')) ?: 'fsw.data.uu.nl',
-                    'zone' => trim((string)($post['zone'] ?? '')) ?: 'nluu10p', 'ticket' => $ticket])) {
+                    'env' => $env, 'password' => $password])) {
                 return $flash('error', 'Could not save — the storage volume may be full or read-only.');
             }
         } elseif ($mode === 'rd-link') {
@@ -301,7 +341,7 @@ function inst_handle_setup_post(array $post, array $files): array {
                     && ($saved['share_token'] ?? '') === $token) {
                 $pw = (string)($saved['password'] ?? '');
             }
-            if ($link === ''|| $pw === '' || $token === '' || !isset($parts['scheme'], $parts['host'])) {
+            if ($link === '' || $pw === '' || $token === '' || !isset($parts['scheme'], $parts['host'])) {
                 return $flash('error', 'Please paste the full share link and its password.');
             }
             if (!inst_source_save(['mode' => 'rd-link',
@@ -333,22 +373,48 @@ function inst_handle_setup_post(array $post, array $files): array {
 }
 
 function inst_gocmd_config(array $src): string {
-    // Credential-free anonymous read-ticket environment, byte-compatible with
-    // the provisioning refresh/probe scripts (ddp-probe.sh.j2 — the form
-    // verified live against Yoda). gocmd receives this as
-    // <config-dir>/irods_environment.json via -c, with the ticket passed
-    // separately via -T. Keep the three in sync.
-    return json_encode([
-        'irods_host' => (string)$src['host'],
-        'irods_port' => 1247,
-        'irods_zone_name' => (string)$src['zone'],
-        'irods_client_zone_name' => (string)$src['zone'],
-        'irods_user_name' => 'anonymous',
-        'irods_client_user_name' => 'anonymous',
-        'irods_authentication_scheme' => 'native',
-        'irods_default_hash_scheme' => 'SHA256',
-        'irods_client_server_policy' => 'CS_NEG_REQUIRE',
-        'irods_client_server_negotiation' => 'request_server_negotiation',
-        'irods_ssl_verify_server' => 'hostname',
-    ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n";
+    // The researcher's own configuration, pasted from the Yoda portal's data
+    // transfer instructions and written out unchanged (no defaults: each
+    // Yoda instance publishes its own host, zone and auth settings). Yoda
+    // has no anonymous login — the 2026-07 "anonymous ticket" design never
+    // worked. The data access password is NOT in this file: gocmd gets it
+    // via IRODS_USER_PASSWORD. gocmd receives this as
+    // <config-dir>/irods_environment.json via -c; ddp-refresh.sh.j2 and
+    // ddp-probe.sh.j2 write the same `env` object.
+    return json_encode($src['env'] ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n";
+}
+
+/** Parse a Yoda portal configuration as pasted by the researcher: the JSON
+ *  form (iCommands / iBridges) or GoCommands' flat `key: value` YAML.
+ *  Keeps only irods_* keys and never a password key (the data access
+ *  password is a separate field, stored apart from the configuration).
+ *  @return array{0: ?array, 1: string} [env, researcher-facing error] */
+function inst_parse_irods_env(string $text): array {
+    $text = trim($text);
+    if ($text === '') { return [null, 'Please paste the configuration from the Yoda portal.']; }
+    $raw = json_decode($text, true);
+    if (!is_array($raw)) {
+        $raw = [];
+        foreach (preg_split('/\R/', $text) as $line) {
+            if (!preg_match('/^\s*(irods_[a-z0-9_]+)\s*:\s*(.*?)\s*$/', $line, $m)) { continue; }
+            $v = $m[2];
+            if (preg_match('/^"(.*)"$/', $v, $q) || preg_match("/^'(.*)'$/", $v, $q)) { $v = $q[1]; }
+            $raw[$m[1]] = $v;
+        }
+    }
+    $env = [];
+    foreach ($raw as $k => $v) {
+        if (!is_string($k) || !str_starts_with($k, 'irods_') || str_contains($k, 'password')) { continue; }
+        if (!is_scalar($v)) { continue; }
+        // YAML values arrive as strings; only the numeric settings become
+        // ints (a username or host that happens to be digits stays a string).
+        $numeric = (bool)preg_match('/_(port|size|rounds)$/', $k);
+        $env[$k] = ($numeric && is_string($v) && preg_match('/^\d+$/', $v)) ? (int)$v : $v;
+    }
+    foreach (['irods_host', 'irods_port', 'irods_zone_name', 'irods_user_name', 'irods_authentication_scheme'] as $need) {
+        if (!isset($env[$need]) || $env[$need] === '') {
+            return [null, "That doesn't look like a complete Yoda configuration ($need is missing). Copy the whole block from the Yoda portal's data transfer page."];
+        }
+    }
+    return [$env, ''];
 }

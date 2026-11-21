@@ -1,6 +1,6 @@
 # DDP Inspector — operator runbook
 
-Everything in this file is OPERATOR territory (SRC portal, SSH, tickets).
+Everything in this file is OPERATOR territory (SRC portal, SSH, Yoda logins).
 Researchers never need any of it: their surface is the web UI. Snag numbers
 (S7, S8, …) refer to the transcribe repo's
 `d3i-infra/researchcloud-ddp-transcribe/docs/catalog-item.md` §5.
@@ -79,27 +79,32 @@ volumes) — necessary because provisioning runs as the cloud user before any
 SRAM user's `~/data` symlink exists (live finding 2026-07-30); the home
 data-dir scan remains as a fallback for shared-mount shapes.
 
-## 4. Yoda read tickets (the "access code")
+## 4. Yoda login (researcher's own account)
 
-Minted by the data manager on a machine with an authenticated gocmd
-(e.g. the pipeline workspace or an operator laptop after `gocmd init`):
+**Correction (2026-11-20):** Yoda has no anonymous login and never had.
+The original design (anonymous user + read ticket, "verified 2026-07-13")
+never worked: a live attempt fails with `Authentication failed (auth
+scheme: "native", username: "anonymous")`. Yoda mode now logs in as the
+researcher, who must be a member of the study's Yoda group.
 
-    gocmd mkticket -t read /nluu10p/home/<collection>     # mint
-    gocmd modticket <ticket> --expiry 2026-09-01          # MANDATORY on real hand-offs
-    gocmd lsticket                                        # audit
-    gocmd rmticket <ticket>                               # revoke
+The researcher supplies three things in Setup:
 
-Defaults are permissive (unlimited uses, NO expiry) — never hand off a
-ticket without `modticket` an expiry. Hand the researcher ONLY the ticket
-string + collection path; they paste both into the app's Setup. Rotation =
-mint new, paste new, `rmticket` old. The workspace never holds a Yoda
-account, DAP, or CO membership (anonymous ticket access, verified
-2026-07-13).
+1. **Their Yoda configuration**, from the Yoda portal's data transfer
+   instructions: "Download as JSON" (iCommands/iBridges
+   `irods_environment.json`) or "Download as YAML" (GoCommands
+   `config.yml`), uploaded, or the block pasted. It is stored unchanged
+   (`irods_*` keys only, password keys dropped) as `source.json`'s `env`
+   and written out as gocmd's `irods_environment.json`. No defaults: each
+   Yoda instance publishes its own host, zone and auth settings (the
+   crime study's is `lp0555.its.uu.nl`, `pam_password`).
+2. **A data access password (DAP)** created in the Yoda portal (not the
+   UU password; DAPs expire). Stored in `source.json` (0600, service user)
+   and handed to gocmd only via `IRODS_USER_PASSWORD`, never in a file or
+   argv. Rotation = create a new DAP, paste it in Setup.
+3. **The folder path**: the full iRODS path, zone and home included
+   (`/nluu10p/home/research-tiktok-crime-policing`).
 
-The collection path is the FULL iRODS path, zone and home included
-(`/nluu10p/home/research-tiktok-crime-policing`): the anonymous ticket
-environment has no `irods_home` to resolve a relative path against.
-What the refresh reads under it:
+What the refresh reads under the folder:
 
     inbox/*.json                     loose donation files (original layout), or
     donations/<YYYYMMDD>_<study>.zip Next exports; the newest zip wins and the
@@ -132,6 +137,15 @@ Operator path (all researcher-visible state lives on the volume):
 The refresh is flock-serialized and idempotent — re-running after any
 failure is always safe.
 
+**Site down with ERR_CONNECTION_REFUSED:** check `sudo systemctl status
+nginx`. SRC-Nginx's `authentication.conf` proxies to
+`gw.live.surfresearchcloud.nl`, which nginx resolves at start; a DNS hiccup
+during any restart leaves nginx failed with `host not found in upstream`
+(seen 2026-11-20 06:38, reported to SURF). `sudo systemctl start nginx`
+recovers it. The playbook installs a `Restart=on-failure` drop-in
+(`/etc/systemd/system/nginx.service.d/ddp-inspector-restart.conf`) so this
+self-heals on workspaces provisioned or updated after that fix.
+
 ## 7. Validation ladder (per spec §8)
 
 1. Sandbox item (SRC-OS/SRC-CO/SRC-External/SRC-Nginx) — hand-prototype.
@@ -148,3 +162,28 @@ Live-validation results (2026-07-30, sandbox): `gocmd sync` REJECTS `-T`
 the refresh script pulls with `get -f` everywhere (re-download, not delta
 sync). SRC-Nginx on Ubuntu 24.04 and the php8.3-fpm socket path are
 verified live on the deployed image.
+
+Live-validation results (2026-11-20, `ddpinspector.perceptionsofcr`):
+Yoda login with the researcher's own portal configuration + DAP via
+`IRODS_USER_PASSWORD` connects from the workspace and fetches; the crime
+study's export zip yields 143 donation files (142 real + test participant
+`laura2`, hide it in the UI). The 2026-07 ticket-era results above are
+client-side flag findings only — anonymous login never worked.
+
+## 8. Updating a running workspace
+
+The playbook is idempotent and all study configuration lives on the
+volume, so updating = re-running it on the workspace from a fresh clone
+(the repo is public; the roles use only `ansible.builtin`, so plain
+ansible-core 2.18, SRC's version, is enough; `uv` is on SRC images):
+
+    git clone --depth 1 --branch <branch-or-main> \
+      https://github.com/daniellemccool/ddp-inspector.git /tmp/ddpi
+    php /tmp/ddpi/tests/run.php            # app tests; php-cli is installed
+    sudo /usr/local/bin/uv tool run --from 'ansible-core>=2.18,<2.19' \
+      ansible-playbook -i 127.0.0.1, /tmp/ddpi/provisioning/deploy-ddp-inspector.yaml
+    rm -rf /tmp/ddpi
+
+Expect `failed=0`. Setup settings (data source, DAP, flows) survive. After
+the run, wait until a refresh started BEFORE the update has finished
+before reading the status line: it reflects the last completed run.
