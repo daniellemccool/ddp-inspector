@@ -43,6 +43,29 @@ eq(study_mode(), 'raw', 'mode raw when invalid');
 eq(study_db_notice(), "The analysis database doesn't look like a pipeline analysis database.", 'invalid notice');
 $e = null;
 
+// Declared but not usable: the data layer returns nothing — never the raw
+// donations or the old transcripts tree (ruling R11).
+@mkdir("$sc/data/inbox", 0755, true);
+copy(__DIR__ . '/fixtures/ddp/assignment=1_task=1_participant=p1_source=tiktok_key=1-tiktok.json',
+     "$sc/data/inbox/assignment=1_task=1_participant=p1_source=tiktok_key=1-tiktok.json");
+@mkdir("$sc/data/analyses/transcripts/29", 0755, true);
+copy(__DIR__ . '/fixtures/transcripts/29/7000000000000000029.txt', "$sc/data/analyses/transcripts/29/7000000000000000029.txt");
+inst_save(['local_path' => "$sc/data/inbox"] + $base + ['analyses' => ['database' => ['enabled' => true, 'path' => 'x.sqlite']]]);
+foreach (['invalid' => fn() => null, 'missing' => fn() => @unlink($dbfile)] as $state => $prep) {
+    $prep();
+    study_reset();
+    eq(study_db_status(), $state, "unusable ($state): status");
+    eq(study_participants(), ['participants' => [], 'skipped' => []], "unusable ($state): empty participant list");
+    eq(study_participant('p1', 15, 1, true), null, "unusable ($state): no participant page");
+    eq(study_transcript('7000000000000000029'), null, "unusable ($state): no transcript");
+    eq(study_donation_count(), 0, "unusable ($state): donation count 0");
+}
+inst_save(['local_path' => "$sc/data/inbox"] + $base);
+study_reset();
+check(isset(study_participants()['participants']['p1']), 'not declared: the raw donations are read');
+exec('rm -rf ' . escapeshellarg("$sc/data/inbox") . ' ' . escapeshellarg("$sc/data/analyses/transcripts") . ' ' . escapeshellarg("$sc/cache"));
+inst_save($base + ['analyses' => ['database' => ['enabled' => true, 'path' => 'x.sqlite']]]);
+
 study_test_build_db($dbfile);
 eq(study_db_status(), 'ok', 'fixture -> ok');
 eq(study_mode(), 'database', 'mode database when ok');
@@ -83,10 +106,20 @@ check($db3 instanceof PDO && $db3 !== $db2, 'a new mtime invalidates the memo wi
 // A missing column makes the shape invalid.
 $bad = "$sc/bad.sqlite";
 study_test_build_db($bad);
-$b = new PDO('sqlite:' . $bad); $b->exec('ALTER TABLE video DROP COLUMN uploader_id'); $b = null;
+$b = new PDO('sqlite:' . $bad);
+foreach (['ALTER TABLE video DROP COLUMN uploader_id', 'ALTER TABLE video DROP COLUMN repost_count', 'DROP TABLE meta',
+          'ALTER TABLE participant DROP COLUMN donation_file', 'ALTER TABLE transcription DROP COLUMN model'] as $sql) { $b->exec($sql); }
+$b = null;
 $GLOBALS['__cfg'] = ['ddp_dir' => __DIR__ . '/fixtures/ddp', 'analysis_db' => $bad];
 eq(study_db_file(), $bad, 'developer-mode file location from config');
-eq(study_db_status(), 'invalid', 'developer mode reads shape (dropped column -> invalid)');
+eq(study_db_status(), 'ok', 'shape check ignores columns and tables the pages never read');
+foreach (['video' => 'uploader', 'participant' => 'donation_file_count', 'share_history' => 'method',
+          'transcription' => 'raw_signals', 'transcription_process' => 'source_url'] as $t => $c) {
+    study_test_build_db($bad);
+    $b = new PDO('sqlite:' . $bad); $b->exec("ALTER TABLE $t DROP COLUMN $c"); $b = null;
+    study_reset();
+    eq(study_db_status(), 'invalid', "developer mode reads shape (dropped $t.$c -> invalid)");
+}
 $GLOBALS['__cfg'] = ['ddp_dir' => __DIR__ . '/fixtures/ddp'];
 eq(study_db_file(), null, 'no file location without storage root or config');
 eq(study_db_status(), 'off', 'developer mode without analysis_db is off');
@@ -113,7 +146,8 @@ eq(array_keys($paT['tables']), ['tiktok_watch_history', 'tiktok_favorite_videos'
 eq($paT['tables']['tiktok_watch_history'], ['count' => 4,
    'earliest' => gmmktime(10, 0, 0, 1, 15, 2026), 'latest' => gmmktime(10, 10, 0, 1, 15, 2026)],
    'db list: watch count and range ignore the NULL watched_at');
-eq($paT['deleted'], ['watch' => 0, 'favorite' => 1, 'share' => 0, 'comment' => 0], 'db list: deleted from deleted_* (non-NULL only)');
+eq($paT['deleted'], ['tiktok_watch_history' => 0, 'tiktok_favorite_videos' => 1, 'tiktok_share_history' => 0, 'tiktok_comments' => 0],
+   'db list: deleted from deleted_* (non-NULL only), keyed by section key like raw mode');
 eq([$paT['videos_total'], $paT['videos_transcribed']], [6, 1], 'db list: coverage over distinct non-NULL video ids');
 $pbT = $dl['participants']['pb']['platforms']['tiktok'];
 eq($pbT['tables']['tiktok_favorite_videos'], ['count' => 0, 'earliest' => null, 'latest' => null], 'db list: 0 count is present and empty');
@@ -255,6 +289,22 @@ eq(count(array_unique(array_merge($o1, $o2))), 4, 'db page: a different order of
 eq($order(study_participant('pa', 2, 1, true)), array_slice($o1, 0, 2), 'db page: n=2 takes the first two of the same order');
 eq(count(study_test_section(study_participant('pa', 2, 1, true), 'tiktok_watch_history')['sample']), 2, 'db page: n limits the sample');
 
+// On a larger pool a reshuffle draws a mostly new sample, not a rotation of the old one.
+$pw = new PDO('sqlite:' . $dbfile);
+$pw->exec("INSERT INTO participant VALUES ('pz', 'consent accepted', NULL, 'donated', NULL, NULL, 1, 200, NULL, NULL, NULL, NULL, 0, NULL, NULL, NULL, NULL)");
+$ins = $pw->prepare("INSERT INTO watch_history VALUES ('pz', :r, NULL, NULL, :raw, :link)");
+$pw->beginTransaction();
+for ($r = 1; $r <= 200; $r++) { $ins->execute([':r' => $r, ':raw' => "row $r", ':link' => "https://example.test/pz/$r"]); }
+$pw->commit(); $pw = null;
+study_reset();
+$s1 = array_map(fn($it) => $it['row']['Link'], study_test_section(study_participant('pz', 15, 1, true), 'tiktok_watch_history')['sample'] ?? []);
+$s2 = array_map(fn($it) => $it['row']['Link'], study_test_section(study_participant('pz', 15, 2, true), 'tiktok_watch_history')['sample'] ?? []);
+eq([count($s1), count($s2)], [15, 15], 'db page: 200-row pool gives full 15-row samples');
+check(count(array_intersect($s1, $s2)) < 5, 'db page: seeds 1 and 2 share fewer than 5 of 15 sampled rows on a 200-row pool (shared: '
+      . count(array_intersect($s1, $s2)) . ')');
+study_test_build_db($dbfile);
+study_reset();
+
 $db_pb = study_participant('pb', 15, 1, true);
 $pbn = $db_pb['platforms']['tiktok']['notes'] ?? [];
 eq(count($pbn), 1, 'db page: repeat submissions produce one note');
@@ -390,6 +440,30 @@ exec('DDP_INSPECTOR_CONFIG=' . escapeshellarg($wcCfg) . ' ' . escapeshellarg(PHP
 eq($wcRc, 0, 'warm-cache: exits 0');
 eq(trim((string)end($wcOut)), '3', 'warm-cache: last stdout line is the donation count');
 eq(count(glob("$sc/cache/study/participants-*.json")), 1, 'warm-cache: the participant-list cache file exists');
+$warm = function () use ($wcCfg): array {
+    $out = []; $rc = -1;
+    exec('DDP_INSPECTOR_CONFIG=' . escapeshellarg($wcCfg) . ' ' . escapeshellarg(PHP_BINARY) . ' -d error_log= '
+         . escapeshellarg(__DIR__ . '/../bin/warm-cache.php') . ' 2>/dev/null', $out, $rc);
+    return [$rc, trim((string)end($out))];
+};
+// A genuinely empty database: exits 0 and reports 0.
+study_test_build_db($dbfile);
+$ew = new PDO('sqlite:' . $dbfile);
+foreach (['participant', 'watch_history', 'like_history', 'favorite_history', 'share_history', 'comment_history'] as $t) { $ew->exec("DELETE FROM $t"); }
+$ew = null;
+exec('rm -rf ' . escapeshellarg("$sc/cache/study"));
+eq($warm(), [0, '0'], 'warm-cache: an empty database exits 0 and reports 0 donations');
+// The list query fails: exit 1, so the refresh logs "cache warm-up failed" instead of a count.
+study_test_build_db($dbfile);
+$bw = new PDO('sqlite:' . $dbfile);
+$bw->exec('DROP TABLE watch_history');
+$bw->exec("CREATE VIEW watch_history AS SELECT abs(-9223372036854775808) AS participant_id, 1 AS donation_row, 'v' AS video_id, 'w' AS watched_at, 'r' AS watched_at_raw, 'l' AS link");
+$bw = null;
+exec('rm -rf ' . escapeshellarg("$sc/cache/study"));
+eq($warm()[0], 1, 'warm-cache: a failed participant-list query exits 1');
+// Declared but not usable (wrong shape): exit 1 as well.
+file_put_contents($dbfile, 'not a database');
+eq($warm()[0], 1, 'warm-cache: an unusable declared database exits 1');
 @unlink($wcCfg);
 $GLOBALS['__cfg'] = $saved_study_cfg;
 study_reset();

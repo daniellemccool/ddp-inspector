@@ -280,13 +280,16 @@ function inst_probe(): array {
     return ['ok' => false, 'count' => null, 'message' => 'No data source configured yet.'];
 }
 
-/** @return array{flash: list<array{kind:string, text:string}>} */
-/** A path inside the study folder: non-empty, relative, no ".." segment. */
+/** A file inside the study folder: non-empty, relative, no ".." segment, and
+ *  not a folder (a trailing slash): the refresh fetches exactly this one file. */
 function inst_valid_relative_path(string $p): bool {
     if ($p === '' || $p[0] === '/' || str_contains($p, "\0")) { return false; }
-    return !in_array('..', explode('/', str_replace('\\', '/', $p)), true);
+    $p = str_replace('\\', '/', $p);
+    if (str_ends_with($p, '/')) { return false; }
+    return !in_array('..', explode('/', $p), true);
 }
 
+/** @return array{flash: list<array{kind:string, text:string}>} */
 function inst_handle_setup_post(array $post, array $files): array {
     $flash = fn(string $kind, string $text) => ['flash' => [['kind' => $kind, 'text' => $text]]];
     $action = (string)($post['action'] ?? '');
@@ -320,7 +323,7 @@ function inst_handle_setup_post(array $post, array $files): array {
             $dbPath = trim((string)$post['analysis_db_path']);
             if ($dbPath === '') { $dbPath = 'analysis/out/analysis.sqlite'; }
             if (!inst_valid_relative_path($dbPath)) {
-                return $flash('error', 'The analysis database path must be inside the study folder, like analysis/out/analysis.sqlite.');
+                return $flash('error', 'The analysis database path must name the file inside the study folder, like analysis/out/analysis.sqlite.');
             }
             $instance['analyses'] = ['database' => ['enabled' => isset($post['analysis_db_enabled']), 'path' => $dbPath]];
         } elseif (isset($inst['analyses'])) {

@@ -15,7 +15,9 @@ if (!preg_match('/^\d{19}$/D', $vid)) {
     return;
 }
 
-$transcript = study_transcript($vid);
+// A declared database that is not usable: the page shows only the notice.
+$notice = study_db_notice();
+$transcript = $notice === null ? study_transcript($vid) : null;
 $txt = $transcript['text'] ?? null;
 $meta = $transcript['meta'] ?? null;
 $reason = ($txt === null && $meta === null && is_string($transcript['availability'] ?? null))
@@ -50,7 +52,9 @@ $seg_info = function (array $seg): array {
     <nav class="crumbs"><a href="<?= h(url('index.php')) ?>">← all participants</a></nav>
   </header>
   <h1>Video <span class="id"><?= h($vid) ?></span></h1>
-  <?php if ($txt === null && $meta === null): ?>
+  <?php if ($notice !== null): ?>
+    <p class="notice"><?= h($notice) ?></p>
+  <?php elseif ($txt === null && $meta === null): ?>
     <?php if ($reason !== null): ?>
       <p class="notice">No transcript: <?= h($reason) ?>.</p>
     <?php else: ?>

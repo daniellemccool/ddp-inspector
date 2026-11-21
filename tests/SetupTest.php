@@ -132,7 +132,7 @@ foreach (['../x.sqlite', '/abs.sqlite'] as $bad) {
 }
 eq(inst_load()['analyses']['database']['path'], 'x/y.sqlite', 'rejected path leaves the stored one alone');
 check(inst_valid_relative_path('a/b.sqlite'), 'relative path valid');
-foreach (['', '/a', 'a/../b', '..', "a\0b"] as $bad) {
+foreach (['', '/a', 'a/../b', '..', "a\0b", 'analysis/out/', 'a/'] as $bad) {
     check(!inst_valid_relative_path($bad), 'invalid relative path: ' . json_encode($bad));
 }
 

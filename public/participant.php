@@ -5,17 +5,18 @@ if (!guard_configured()) { return; }
 
 $id   = is_string($_GET['id'] ?? null) ? $_GET['id'] : '';
 $seed = max(1, (int)(is_scalar($_GET['seed'] ?? null) ? $_GET['seed'] : 1));
-$n    = max(1, (int)(is_scalar($_GET['n'] ?? null) ? $_GET['n'] : cfg('default_n', 15)));
+$n    = min(500, max(1, (int)(is_scalar($_GET['n'] ?? null) ? $_GET['n'] : cfg('default_n', 15))));
 
 $showAllRows = ($_GET['all'] ?? '') === '1';
-$participant = study_participant($id, $n, $seed, $showAllRows);
-if ($participant === null) {
+// A declared database that is not usable: the page shows only the notice.
+$notice = study_db_notice();
+$participant = $notice === null ? study_participant($id, $n, $seed, $showAllRows) : null;
+if ($notice === null && $participant === null) {
     http_response_code(404);
     echo '<!doctype html><title>Not found</title><p>Participant not found (404).</p>';
     return;
 }
-$id = $participant['id'];
-$notice = study_db_notice();
+$id = $participant['id'] ?? $id;
 ?>
 <!doctype html>
 <meta charset="utf-8">
@@ -28,7 +29,7 @@ $notice = study_db_notice();
     <nav class="crumbs"><a href="<?= h(url('index.php')) ?>">← all participants</a></nav>
   </header>
   <h1>Participant <span class="id"><?= h($id) ?></span></h1>
-  <?php if ($notice !== null): ?><p class="notice"><?= h($notice) ?></p><?php endif; ?>
+  <?php if ($notice !== null): ?><p class="notice"><?= h($notice) ?></p><?php else: ?>
   <p class="samplesize">sample size:
     <?php foreach ([10, 15, 20, 50] as $opt): ?>
       <a href="<?= h(url('participant.php?id=' . rawurlencode($id) . '&n=' . $opt . '&seed=' . $seed . ($showAllRows ? '&all=1' : ''))) ?>"<?= $opt === $n ? ' class="cur"' : '' ?>><?= $opt ?></a>
@@ -93,4 +94,5 @@ $notice = study_db_notice();
       </section>
     <?php endforeach; ?>
   <?php endforeach; ?>
+  <?php endif; ?>
 </main>

@@ -54,10 +54,13 @@ if ($storageMode) { csrf_token(); }
   <?php if ($notice !== null): ?><p class="notice"><?= h($notice) ?></p><?php endif; ?>
   <?php if ($storageMode): ?>
     <div class="toolbar">
-      <p class="meta">
-        <?php if (!empty($status['finished_at'])): ?>Last updated <?= h((string)$status['finished_at']) ?> ·<?php endif; ?>
-        <?= study_donation_count() ?> donation file(s)
-      </p>
+      <p class="meta"><?php
+        // Database mode counts participants who donated; raw mode counts files.
+        // No count while the notice applies: there is nothing to count yet.
+        $metaBits = [];
+        if (!empty($status['finished_at'])) { $metaBits[] = 'Last updated ' . h((string)$status['finished_at']); }
+        if ($notice === null) { $metaBits[] = study_donation_count() . (study_mode() === 'database' ? ' donation(s)' : ' donation file(s)'); }
+        echo implode(' · ', $metaBits); ?></p>
       <form method="post" action="<?= h(url('setup.php')) ?>">
         <?= csrf_field() ?><input type="hidden" name="action" value="refresh_now">
         <button>Check for new donations</button>
@@ -67,6 +70,7 @@ if ($storageMode) { csrf_token(); }
       <p class="skipped"><?= h((string)$status['message']) ?></p>
     <?php endif; ?>
   <?php endif; ?>
+  <?php if ($notice === null): ?>
   <?php if ($loaded['skipped']): ?>
     <details class="skipped">
       <summary>⚠ <?= count($loaded['skipped']) ?> <?= study_mode() === 'database' ? '' : 'file(s) ' ?>set aside — <?= h(implode(', ', $skipBits)) ?></summary>
@@ -115,5 +119,6 @@ if ($storageMode) { csrf_token(); }
     <?php endforeach; ?>
     </tbody>
   </table>
+  <?php endif; ?>
   <?php endif; ?>
 </main>

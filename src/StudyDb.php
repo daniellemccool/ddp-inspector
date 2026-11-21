@@ -58,7 +58,7 @@ function study_db_participants_compute(PDO $db): array {
                 [$lo, $hi] = $range[$s][$id] ?? [null, null];
                 $tables[$key] = ['count' => (int)$p["n_$s"], 'earliest' => $lo, 'latest' => $hi];
             }
-            if ($p["deleted_$s"] !== null) { $deleted[$s] = (int)$p["deleted_$s"]; }
+            if ($p["deleted_$s"] !== null) { $deleted[$key] = (int)$p["deleted_$s"]; }
         }
         [$vt, $vr] = $cov[$id] ?? [0, 0];
         $participants[$id] = ['id' => $id, 'platforms' => ['tiktok' => [
@@ -70,6 +70,7 @@ function study_db_participants_compute(PDO $db): array {
 /** The participant list, cached as <cache>/study/participants-<size>-<mtime>.json
  *  (keyed by the database file; writing a new one removes the others). */
 function study_db_participants(): array {
+    study_db_list_failed(false);
     $db = study_db();
     $file = study_db_file();
     $cache = inst_paths()['cache'];
@@ -95,8 +96,18 @@ function study_db_try_compute(PDO $db): ?array {
         return study_db_participants_compute($db);
     } catch (PDOException $e) {
         error_log('DDP Inspector: analysis database error (participant list): ' . $e->getMessage());
+        study_db_list_failed(true);
         return null;
     }
+}
+
+/** Whether the last study_db_participants() call got its empty list from a
+ *  failed query rather than an empty database (bin/warm-cache.php exits 1 on
+ *  it). Pass a bool to set it. */
+function study_db_list_failed(?bool $set = null): bool {
+    static $failed = false;
+    if ($set !== null) { $failed = $set; }
+    return $failed;
 }
 
 /** Per section: the donated row keys and the columns they come from (spec §5.3;

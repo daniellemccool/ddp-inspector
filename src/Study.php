@@ -3,26 +3,25 @@
 // where that file is, whether it has the expected shape, and the one read-only
 // connection to it. The database is the pipeline's; this app never writes to it.
 
-/** Tables and columns the app relies on (pipeline schema; see the design spec). */
+/** Tables and columns the pages read (pipeline schema; see the design spec).
+ *  Only these are checked, so a pipeline that adds or drops other columns or
+ *  tables (meta, video.uploader_id, …) still passes. */
 function study_db_required(): array {
+    $history = fn(string $at, string ...$more) => array_merge(
+        ['participant_id', 'donation_row', 'video_id', $at, $at . '_raw', 'link'], $more);
     return [
-        'participant' => ['participant_id', 'consent_status', 'consent_recorded_at', 'donation_status',
-            'donated_at', 'donation_file', 'donation_file_count', 'n_watch', 'n_like', 'n_favorite',
-            'n_share', 'n_comment', 'deleted_watch', 'deleted_like', 'deleted_favorite',
-            'deleted_share', 'deleted_comment'],
-        'watch_history' => ['participant_id', 'donation_row', 'video_id', 'watched_at', 'watched_at_raw', 'link'],
-        'like_history' => ['participant_id', 'donation_row', 'video_id', 'liked_at', 'liked_at_raw', 'link'],
-        'favorite_history' => ['participant_id', 'donation_row', 'video_id', 'favorited_at', 'favorited_at_raw', 'link'],
-        'share_history' => ['participant_id', 'donation_row', 'video_id', 'shared_at', 'shared_at_raw',
-            'content_type', 'method', 'link'],
+        'participant' => ['participant_id', 'consent_status', 'donation_status', 'donation_file_count',
+            'n_watch', 'n_like', 'n_favorite', 'n_share', 'n_comment',
+            'deleted_watch', 'deleted_like', 'deleted_favorite', 'deleted_share', 'deleted_comment'],
+        'watch_history' => $history('watched_at'),
+        'like_history' => $history('liked_at'),
+        'favorite_history' => $history('favorited_at'),
+        'share_history' => $history('shared_at', 'content_type', 'method'),
         'comment_history' => ['participant_id', 'donation_row', 'commented_at', 'commented_at_raw', 'comment'],
-        'video' => ['video_id', 'availability', 'description', 'uploader', 'uploader_id', 'channel_id',
-            'created_at', 'tiktok_duration_s', 'view_count', 'like_count', 'comment_count',
-            'repost_count', 'metadata_fetched_at'],
-        'transcription' => ['video_id', 'transcript', 'language', 'audio_duration_s', 'model',
-            'transcribed_at', 'raw_signals'],
+        'video' => ['video_id', 'availability', 'description', 'uploader', 'created_at',
+            'view_count', 'like_count', 'comment_count', 'metadata_fetched_at'],
+        'transcription' => ['video_id', 'transcript', 'language', 'audio_duration_s', 'raw_signals'],
         'transcription_process' => ['video_id', 'source_url'],
-        'meta' => ['key', 'value'],
     ];
 }
 
@@ -106,6 +105,14 @@ function study_db(): ?PDO {
     return study_memo()['pdo'];
 }
 
+/** A database is declared but cannot be read (not fetched yet, or not the
+ *  pipeline's shape). The data layer then returns nothing and the pages show
+ *  only study_db_notice(): the raw backend is used only when no database is
+ *  declared, so the old donations and transcripts tree are never read. */
+function study_db_unusable(): bool {
+    return in_array(study_db_status(), ['missing', 'invalid'], true);
+}
+
 function study_db_notice(): ?string {
     switch (study_db_status()) {
         case 'missing': return "The analysis database hasn't been fetched yet — run Check & fetch in Settings.";
@@ -116,9 +123,9 @@ function study_db_notice(): ?string {
 
 // ---------------------------------------------------------------------------
 // Data layer. Pages render only from these four functions' return values.
-// Each one dispatches to its backend: study_raw_* (the donation files, today's
-// logic) or, once present, study_db_* (the analysis database); the database
-// branch goes in front of the raw call as `if (study_mode() === 'database')`.
+// Each one dispatches to its backend: study_db_* (the analysis database, when
+// it is declared and usable) or study_raw_* (the donation files, only when no
+// database is declared). Declared but unusable: nothing (study_db_unusable()).
 // ---------------------------------------------------------------------------
 
 /**
@@ -127,6 +134,7 @@ function study_db_notice(): ?string {
  */
 function study_participants(): array {
     if (study_mode() === 'database') { return study_db_participants(); }
+    if (study_db_unusable()) { return ['participants' => [], 'skipped' => []]; }
     return study_raw_participants();
 }
 
@@ -140,18 +148,20 @@ function study_participants(): array {
  */
 function study_participant(string $id, int $n, int $seed, bool $all): ?array {
     if (study_mode() === 'database') { return study_db_participant($id, $n, $seed, $all); }
+    if (study_db_unusable()) { return null; }
     return study_raw_participant($id, $n, $seed, $all);
 }
 
 /**
  * One video's transcript: `meta` in the artifact JSON's shape (video_metadata,
  * source_url, language_detected, duration_s, raw_signals); each part null when
- * unknown. Null for a malformed video id.
+ * unknown. Null for a malformed video id, or while a declared database is unusable.
  * @return ?array{text:?string, meta:?array, availability:?string}
  */
 function study_transcript(string $vid): ?array {
     if (!preg_match('/^\d{19}$/D', $vid)) { return null; }
     if (study_mode() === 'database') { return study_db_transcript($vid); }
+    if (study_db_unusable()) { return null; }
     return study_raw_transcript($vid);
 }
 
@@ -176,6 +186,7 @@ function study_availability_label(string $availability): ?string {
 
 function study_donation_count(): int {
     if (study_mode() === 'database') { return study_db_donation_count(study_db()); }
+    if (study_db_unusable()) { return 0; }
     return inst_donation_count();
 }
 
