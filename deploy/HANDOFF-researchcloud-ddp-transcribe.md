@@ -126,7 +126,7 @@ Suggested shape, matching your conventions (single play `vars:` block, `roles/<n
 
 ## 7. Verifying a deployment
 
-Behind the proxy, an authenticated request to `https://<hostname>.<co>.src.surf-hosted.nl/inspector/` should list the participants. Sanity check against known pilot ground truth (participant `69f39df5fdef5b2e2a84011b`): the scope table must read **watch 90,466 / favorites 5,384 / likes 2,973 / shares 55 / comments 30**. Locally the same is reproducible with `./run-dev.sh` (`php -S 127.0.0.1:8110`) pointed at the DDP inbox.
+Behind the proxy, an authenticated request to `https://<hostname>.<co>.src.surf-hosted.nl/inspector/` should list the participants. Sanity check against ground truth: pick one participant, count their rows per section in the raw donation file by hand, and confirm the scope table shows the same numbers. Locally the same is reproducible with `./run-dev.sh` (`php -S 127.0.0.1:8110`) pointed at the DDP inbox.
 
 ## 8. References (in the inspector repo)
 

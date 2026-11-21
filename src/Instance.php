@@ -191,7 +191,19 @@ function inst_probe(): array {
             return ['ok' => false, 'count' => null,
                     'message' => 'That folder cannot be read. Check the path with whoever set up this workspace.'];
         }
-        $n = count(glob(rtrim($dir, '/') . '/*.json') ?: []);
+        // The study's folder: donations right in it (as before), else in
+        // inbox/, else a donations/ export — the refresh's order. Never
+        // recursive and never opens a zip, so the check stays cheap.
+        $dir = rtrim($dir, '/');
+        if (!inst_dir_has_donations($dir)) {
+            if (is_dir("$dir/inbox")) {
+                $dir .= '/inbox';
+            } elseif ((glob("$dir/donations/*.zip") ?: []) !== []) {
+                return ['ok' => true, 'count' => null,
+                        'message' => 'Found the donations export ✓ — it is unpacked when you fetch.'];
+            }
+        }
+        $n = count(glob("$dir/*.json") ?: []);
         return ['ok' => true, 'count' => $n, 'message' => "Found $n donation file(s) ✓"];
     }
     $src = inst_source_load();
@@ -268,6 +280,15 @@ function inst_probe(): array {
     return ['ok' => false, 'count' => null, 'message' => 'No data source configured yet.'];
 }
 
+/** A file inside the study folder: non-empty, relative, no ".." segment, and
+ *  not a folder (a trailing slash): the refresh fetches exactly this one file. */
+function inst_valid_relative_path(string $p): bool {
+    if ($p === '' || $p[0] === '/' || str_contains($p, "\0")) { return false; }
+    $p = str_replace('\\', '/', $p);
+    if (str_ends_with($p, '/')) { return false; }
+    return !in_array('..', explode('/', $p), true);
+}
+
 /** @return array{flash: list<array{kind:string, text:string}>} */
 function inst_handle_setup_post(array $post, array $files): array {
     $flash = fn(string $kind, string $text) => ['flash' => [['kind' => $kind, 'text' => $text]]];
@@ -297,6 +318,17 @@ function inst_handle_setup_post(array $post, array $files): array {
             'default_n'   => (int)($inst['default_n'] ?? cfg('default_n', 15)),
         ];
         if (isset($inst['analysis_dirs'])) { $instance['analysis_dirs'] = $inst['analysis_dirs']; }
+        // The analysis database block: absent from the post means "keep what is saved".
+        if (isset($post['analysis_db_path'])) {
+            $dbPath = trim((string)$post['analysis_db_path']);
+            if ($dbPath === '') { $dbPath = 'analysis/out/analysis.sqlite'; }
+            if (!inst_valid_relative_path($dbPath)) {
+                return $flash('error', 'The analysis database path must name the file inside the study folder, like analysis/out/analysis.sqlite.');
+            }
+            $instance['analyses'] = ['database' => ['enabled' => isset($post['analysis_db_enabled']), 'path' => $dbPath]];
+        } elseif (isset($inst['analyses'])) {
+            $instance['analyses'] = $inst['analyses'];
+        }
         // Secret fields are never echoed back (they show "saved ✓"), so a
         // blank one on re-save means "keep what is saved" — as long as the
         // saved secret belongs to the same source.

@@ -8,6 +8,7 @@
     name:
       - php-fpm
       - php-cli
+      - php-sqlite3
       - acl
       - jq
       - rsync
@@ -15,7 +16,7 @@
     state: present
     update_cache: true
 
-- name: Copy the app from the component clone (public/ + src/)
+- name: Copy the app from the component clone (public/ + src/ + bin/)
   ansible.builtin.copy:
     src: "{{ playbook_dir }}/../{{ item }}/"
     dest: "{{ inspector_install_dir }}/{{ item }}/"
@@ -25,6 +26,7 @@
   loop:
     - public
     - src
+    - bin
   notify: Restart php-fpm
 
 - name: Template study-blind config.php

@@ -28,7 +28,7 @@ check(!str_contains($html, 'participant.php?id=preview'), 'index does not list s
 $html = render_page('participant.php', ['id' => 'p1', 'seed' => '1', 'n' => '1']);
 check(str_contains($html, 'tiktok_watch_history') || str_contains($html, 'Tiktok watch history'), 'participant shows watch history table');
 check(str_contains($html, 'Igual estoy yo') || str_contains($html, 'second comment'), 'comment text rendered generically');
-check(str_contains($html, 'transcript.php?vid=7654562293757250829'), 'video row links to transcript via analysis module');
+check(str_contains($html, 'transcript.php?vid=7000000000000000029'), 'video row links to transcript via analysis module');
 check(str_contains($html, 'seed=2'), 'reshuffle link bumps seed');
 check(str_contains($html, '<h2>') && str_contains(strtolower($html), 'tiktok'), 'platform heading present');
 
@@ -36,7 +36,7 @@ $missing = render_page('participant.php', ['id' => 'nope']);
 check(str_contains($missing, 'not found') || str_contains($missing, '404'), 'unknown participant -> not found');
 
 // --- transcript.php ---
-$ok = render_page('transcript.php', ['vid' => '7654562293757250829']);
+$ok = render_page('transcript.php', ['vid' => '7000000000000000029']);
 check(str_contains($ok, 'Hello world this is a test'), 'transcript text rendered');
 check(str_contains($ok, '0.42') || str_contains($ok, 'low'), 'low-confidence segment surfaced');
 check(str_contains($ok, '<td>Hello world</td>'), 'segment text derived from tokens, marker tokens skipped');
@@ -120,6 +120,47 @@ check(str_contains($storageParticipantA, 'removed') && str_contains($storagePart
 
 $storageParticipantB = render_page('participant.php', ['id' => 'spB', 'seed' => '1', 'n' => '5']);
 check(str_contains($storageParticipantB, 'donated more than once for this platform'), 'superseded note rendered');
+$bigN = render_page('participant.php', ['id' => 'spA', 'seed' => '1', 'n' => '100000']);
+check(str_contains($bigN, 'n=500&amp;') && !str_contains($bigN, 'n=100000'), 'raw participant page: sample size clamped to 500');
+
+// Database mode index: donated participants listed, the other two set aside.
+$dbScratch = sys_get_temp_dir() . '/ddp-inspector-pages-db-' . getmypid();
+exec('rm -rf ' . escapeshellarg($dbScratch));
+@mkdir("$dbScratch/data/analyses", 0755, true);
+$GLOBALS['__cfg'] = ['storage_root' => $dbScratch, 'default_n' => 15, 'base_path' => ''];
+inst_save(['study_name' => 'Db index', 'source_mode' => 'local', 'local_path' => "$dbScratch/data/inbox",
+           'cadence' => 'off', 'default_n' => 15,
+           'analyses' => ['database' => ['enabled' => true, 'path' => 'analysis.sqlite']]]);
+(new PDO("sqlite:$dbScratch/data/analyses/analysis.sqlite"))->exec((string)file_get_contents(__DIR__ . "/fixtures/analysis.sql"));
+study_reset();
+$dbIndex = render_page('index.php', []);
+check(str_contains($dbIndex, '>pa<') || str_contains($dbIndex, 'pa</a>'), 'db index lists pa');
+check(str_contains($dbIndex, 'consented, did not donate'), 'db index labels the not-donated set-aside kind');
+check(str_contains($dbIndex, 'declined consent'), 'db index labels the declined-consent kind');
+check(str_contains($dbIndex, '3 donation(s)') && !str_contains($dbIndex, 'donation file(s)'), 'db index counts donations, not donation files');
+$dbBigN = render_page('participant.php', ['id' => 'pa', 'seed' => '1', 'n' => '100000']);
+check(str_contains($dbBigN, 'n=500&amp;') && !str_contains($dbBigN, 'n=100000'), 'db participant page: sample size clamped to 500');
+$dbPage = render_page('participant.php', ['id' => 'pa', 'seed' => '1', 'n' => '15']);
+check(str_contains($dbPage, 'transcript.php?vid=7000000000000001001'), 'db participant page links the transcribed video');
+check(!str_contains($dbPage, 'removed or private'), 'db participant page hides untranscribed rows by default');
+$dbPageAll = render_page('participant.php', ['id' => 'pa', 'seed' => '1', 'n' => '15', 'all' => '1']);
+check(str_contains($dbPageAll, '<span class="reason">removed or private</span>'), 'db participant page renders a reason text');
+check(str_contains($dbPageAll, 'example.test/v/unresolved'), 'db participant page shows the NULL-video row');
+$dbPagePb = render_page('participant.php', ['id' => 'pb', 'seed' => '1', 'n' => '15']);
+check(str_contains($dbPagePb, 'submitted 2 files; the first one with data is shown'), 'db participant page shows the repeat-submission note');
+$dbTx = render_page('transcript.php', ['vid' => '7000000000000001001']);
+check(str_contains($dbTx, 'Hello world'), 'db transcript page: text');
+check(str_contains($dbTx, 'Segment confidence') && str_contains($dbTx, '0.75'), 'db transcript page: segment confidence');
+check(str_contains($dbTx, '@uploader_a') && str_contains($dbTx, 'watch on TikTok'), 'db transcript page: metadata');
+$dbTxGated = render_page('transcript.php', ['vid' => '7000000000000001004']);
+check(str_contains($dbTxGated, 'not available in this region') && !str_contains(strtolower($dbTxGated), 'not transcribed yet'), 'db transcript page: untranscribed reason');
+$dbTxNone = render_page('transcript.php', ['vid' => '1111111111111111111']);
+check(str_contains(strtolower($dbTxNone), 'not transcribed yet'), 'db transcript page: unknown id');
+check(str_contains(render_page('transcript.php', ['vid' => '../etc/passwd']), '400'), 'db transcript page: malformed id -> 400');
+$dbMissing = render_page('participant.php', ['id' => 'nobody']);
+check(str_contains($dbMissing, 'not found') || str_contains($dbMissing, '404'), 'db participant page: unknown id -> not found');
+study_reset();
+exec('rm -rf ' . escapeshellarg($dbScratch));
 
 // Separate scratch instance: configured, but nothing donated yet -> friendly empty state.
 $emptyScratch = sys_get_temp_dir() . '/ddp-inspector-pages-empty-' . getmypid();
@@ -157,6 +198,53 @@ check(str_contains($guarded, 'setup.php'), 'guard message links to setup.php');
 check(!str_contains($guarded, '<table'), 'guard-blocked page renders no participant table');
 $GLOBALS['__cfg'] = $__saved_cfg_guard;
 exec('rm -rf ' . escapeshellarg($guardScratch));
+
+// --- analysis database declared but not usable: pages show only the notice,
+//     never the raw donations or the old transcripts tree (ruling R11) ---
+$noticeScratch = sys_get_temp_dir() . '/ddp-inspector-pages-notice-' . getmypid();
+exec('rm -rf ' . escapeshellarg($noticeScratch));
+@mkdir("$noticeScratch/data/inbox", 0755, true);
+copy(__DIR__ . '/fixtures/ddp/assignment=1_task=1_participant=p1_source=tiktok_key=1-tiktok.json',
+     "$noticeScratch/data/inbox/assignment=1_task=1_participant=p1_source=tiktok_key=1-tiktok.json");
+@mkdir("$noticeScratch/data/analyses/transcripts/29", 0755, true);
+copy(__DIR__ . '/fixtures/transcripts/29/7000000000000000029.txt', "$noticeScratch/data/analyses/transcripts/29/7000000000000000029.txt");
+$__saved_cfg_notice = $GLOBALS['__cfg'];
+$GLOBALS['__cfg'] = ['storage_root' => $noticeScratch, 'default_n' => 15, 'base_path' => ''];
+inst_save(['study_name' => 'Notice test', 'source_mode' => 'local', 'local_path' => "$noticeScratch/data/inbox",
+           'cadence' => 'off', 'default_n' => 15,
+           'analyses' => ['database' => ['enabled' => true, 'path' => 'analysis.sqlite']]]);
+study_reset();
+$noticeIndex = render_page('index.php', ['all' => '1']);
+check(str_contains($noticeIndex, '<p class="notice">The analysis database hasn&#039;t been fetched yet'),
+      'declared database missing -> index shows the not-fetched notice');
+check(!str_contains($noticeIndex, 'participant.php?id=p1'), 'declared database missing -> index lists no raw donations');
+check(!str_contains($noticeIndex, 'No donations yet'), 'declared database missing -> no empty-inbox text under the notice');
+check(!str_contains($noticeIndex, 'donation file(s)'), 'declared database missing -> no raw donation-file count');
+$noticeParticipant = render_page('participant.php', ['id' => 'p1', 'seed' => '1', 'n' => '5']);
+check(str_contains($noticeParticipant, '<p class="notice">The analysis database hasn&#039;t been fetched yet'),
+      'declared database missing -> participant page shows the not-fetched notice');
+check(!str_contains($noticeParticipant, 'Participant not found') && !str_contains($noticeParticipant, 'tiktok_watch_history')
+      && !str_contains($noticeParticipant, 'Tiktok watch history'), 'declared database missing -> participant page shows only the notice');
+$noticeTx = render_page('transcript.php', ['vid' => '7000000000000000029']);
+check(str_contains($noticeTx, '<p class="notice">The analysis database hasn&#039;t been fetched yet'),
+      'declared database missing -> transcript page shows the not-fetched notice');
+check(!str_contains($noticeTx, 'Hello world') && !str_contains(strtolower($noticeTx), 'not transcribed yet'),
+      'declared database missing -> transcript page reads nothing from the old transcripts tree');
+@mkdir("$noticeScratch/data/analyses", 0755, true);
+file_put_contents("$noticeScratch/data/analyses/analysis.sqlite", 'not a database');
+$noticeIndex = render_page('index.php', []);
+check(str_contains($noticeIndex, '<p class="notice">The analysis database doesn&#039;t look like a pipeline analysis database.'),
+      'declared database with the wrong shape -> index shows the shape notice');
+check(!str_contains($noticeIndex, 'participant.php?id=p1'), 'declared database with the wrong shape -> index lists no raw donations');
+$noticeParticipant = render_page('participant.php', ['id' => 'p1', 'seed' => '1', 'n' => '5']);
+check(str_contains($noticeParticipant, 'doesn&#039;t look like a pipeline analysis database')
+      && !str_contains($noticeParticipant, 'Participant not found') && !str_contains($noticeParticipant, 'Tiktok watch history'),
+      'declared database with the wrong shape -> participant page shows only the notice');
+$GLOBALS['__cfg'] = $__saved_cfg_notice;
+study_reset();
+exec('rm -rf ' . escapeshellarg($noticeScratch));
+$plainIndex = render_page('index.php', []);
+check(!str_contains($plainIndex, 'analysis database'), 'no database declared -> no notice');
 
 // §7 ground-truth guard: the generic path must reproduce exact per-table row
 // counts. Uses the synthetic examples/ dataset when present (regenerable via

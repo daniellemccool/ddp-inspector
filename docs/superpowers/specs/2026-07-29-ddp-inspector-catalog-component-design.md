@@ -238,8 +238,8 @@ SSH-runnable by the operator for debugging.
 
 ### Sizing
 
-Donation-only studies: MBs — any volume works. The crime study: tars +
-extracted tree ≈ 2× transcripts, ~60–90 GB at campaign end (S11: size
+Donation-only studies: MBs — any volume works. A transcript-heavy study:
+tars + extracted tree ≈ 2× transcripts, tens of GB at campaign end (S11: size
 generously, check growability first). Guidance lives in the provisioning
 README.
 
@@ -307,10 +307,9 @@ reproducible across visits); **transcript** page becomes the transcripts
 analysis view. Perf envelope from the handoff §4 still governs: 9.6 MB/90k-row
 donor renders in ~1.5–2 s at ~63 MB peak.
 
-**Ground truth (regression anchor):** crime-study participant
-`69f39df5fdef5b2e2a84011b` must show watch 90,466 / favorites 5,384 /
-likes 2,973 / shares 55 / comments 30 — per-table row counts through the
-generic path, bit-for-bit.
+**Ground truth (regression anchor):** for a participant whose per-section
+row counts were verified by hand in the raw donation, the generic path
+must show the same per-table row counts, bit-for-bit.
 
 ### Linking boundary (analyses)
 
@@ -353,8 +352,8 @@ silently. Config missing → setup wizard, not an error page.
   gocmd/rclone (`test-tiered-scripts.sh` pattern): ticket-invalid,
   empty-collection, resume-after-interrupt.
 - **Live ladder**: sandbox item hand-prototype → component appended to
-  sandbox item (first integration launch) → crime-study viewer verified
-  against the §7 participant. Validation log kept from day one.
+  sandbox item (first integration launch) → first real study verified
+  against a hand-checked participant. Validation log kept from day one.
 
 ## 9. Open items
 

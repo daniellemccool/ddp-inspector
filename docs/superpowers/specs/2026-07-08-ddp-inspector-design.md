@@ -6,7 +6,7 @@
 
 ## 1. Problem
 
-A researcher (crime/policing TikTok study) needs to confirm that the **pilot DDP donations align with her expectations** before the study scales up. She needs to see, per participant, what actually arrived in the data-donation extracts.
+A researcher (TikTok data-donation study) needs to confirm that the **pilot DDP donations align with her expectations** before the study scales up. She needs to see, per participant, what actually arrived in the data-donation extracts.
 
 A one-off transcript browser was built on 3 July 2026 (`~/ddp-demo/artifact-browser.py`) for a live demo. It is **transcript-centric and participant-blind**: it walks the sharded transcript output (`<shard>/<video_id>.txt|.json`) keyed by unique video ID and has no concept of a participant. Two structural gaps make it unfit for validation:
 
@@ -49,15 +49,10 @@ The **participant ID is derived from the `participant=` filename segment**, not 
 Each section object also carries a `deleted row count` key, which is ignored.
 
 **Key data facts that shape the design:**
-- **Comments cannot be linked to videos.** A comment entry is `{Comment, Date}` only; there is no link or video ID. (338 of the pilot comments merely *mention* "http"/"tiktok" in free text; none contain a `/video/` reference.) → Comments are shown **standalone**.
+- **Comments cannot be linked to videos.** A comment entry is `{Comment, Date}` only; there is no link or video ID. (Some comments merely *mention* "http"/"tiktok" in free text; none contain a `/video/` reference.) → Comments are shown **standalone**.
 - **Date formats differ by section:** comments use `YYYY-MM-DD HH:MM:SS UTC`; the other four use `YYYY-MM-DD HH:MM:SS` (no suffix). Date handling must tolerate both.
 - **Canonical video URLs** are `https://www.tiktokv.com/share/video/{19-digit-id}/` (and the `@user/video/{id}` form); the video ID is the 19 digits.
-- **Participants are wildly asymmetric.** The two pilot donors illustrate this and serve as the working example:
-
-| Participant | watch | favorites | likes | shares | comments |
-|---|---|---|---|---|---|
-| `69f39df5…` | 90,466 | 5,384 | 2,973 | 55 | 30 |
-| `6942a793…` | 3,823 | 410 | 6,000 | 100 | 6,074 |
+- **Participants are wildly asymmetric.** One donor can have tens of thousands of watch-history rows and a handful of comments while another has the reverse.
 
 This asymmetry is itself a validation signal, and it is why per-section **sampling with true totals always shown** is central.
 

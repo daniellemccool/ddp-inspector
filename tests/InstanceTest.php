@@ -61,6 +61,27 @@ $probe = inst_probe();
 eq($probe['ok'], true, 'local probe ok');
 eq($probe['count'], 1, 'local probe counts donations');
 
+// local probe on a study's top folder: donations in inbox/, else an export
+$study = "$scratch/study";
+@mkdir("$study/inbox", 0755, true);
+@mkdir("$study/analysis", 0755, true);
+file_put_contents("$study/inbox/assignment=1_task=1_participant=y_source=tiktok_key=1-tiktok.json", '[]');
+file_put_contents("$study/inbox/assignment=1_task=1_participant=w_source=tiktok_key=2-tiktok.json", '[]');
+file_put_contents("$study/analysis/notes.json", '{}');
+inst_save(['study_name' => 'Pilot', 'source_mode' => 'local', 'local_path' => $study,
+           'cadence' => 'off', 'default_n' => 15]);
+$probe = inst_probe();
+eq($probe['ok'], true, 'local probe ok on a study folder with inbox/');
+eq($probe['count'], 2, 'local probe counts the inbox/ donations');
+$export = "$scratch/study-export";
+@mkdir("$export/donations", 0755, true);
+file_put_contents("$export/donations/20260101_s.zip", 'zip');
+inst_save(['study_name' => 'Pilot', 'source_mode' => 'local', 'local_path' => $export,
+           'cadence' => 'off', 'default_n' => 15]);
+$probe = inst_probe();
+eq($probe['ok'], true, 'local probe ok on a study folder with an export');
+check(str_contains($probe['message'], 'export'), 'local probe mentions the export');
+
 inst_save(['study_name' => 'Pilot', 'source_mode' => 'local', 'local_path' => '/nonexistent/nope',
            'cadence' => 'off', 'default_n' => 15]);
 $probe = inst_probe();
@@ -83,7 +104,7 @@ $fakeg = "$scratch/fake-gocmd";
 $glog = "$scratch/gocmd-args.log";
 $gcopy = "$scratch/gocmd-env-copy.json";
 $gpw = "$scratch/gocmd-password.txt";
-$fakeBody = function (string $exitWith, string $say): string use ($glog, $gcopy, $gpw) {
+$fakeBody = function (string $exitWith, string $say) use ($glog, $gcopy, $gpw): string {
     return "#!/bin/sh\nprintf '%s' \"\$*\" > " . escapeshellarg($glog) . "\n"
         . "printf '%s' \"\$IRODS_USER_PASSWORD\" > " . escapeshellarg($gpw) . "\n"
         . "[ \"\$1\" = -c ] || exit 3\n"

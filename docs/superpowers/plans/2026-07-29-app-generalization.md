@@ -42,7 +42,7 @@
 - [ ] **Step 1: Write the failing test** — append to `tests/DdpTest.php`:
 
 ```php
-$meta = ddp_file_meta('/x/assignment=406_task=954_participant=abc_source=instagram_key=1783300000002-instagram.json');
+$meta = ddp_file_meta('/x/assignment=900_task=901_participant=abc_source=instagram_key=1783300000002-instagram.json');
 eq($meta['participant'], 'abc', 'meta participant');
 eq($meta['source'], 'instagram', 'meta source');
 eq($meta['key_millis'], 1783300000002, 'meta key millis');
@@ -93,7 +93,7 @@ and replace the body of `ddp_participant_id_from_filename()` with `return ddp_fi
 $parsed = ddp_parse_file($p1);
 eq(is_array($parsed), true, 'parse returns array for conforming file');
 eq(count($parsed['tables']['tiktok_watch_history']), 3, 'watch history rows');
-eq($parsed['tables']['tiktok_watch_history'][0]['Link'], 'https://www.tiktokv.com/share/video/7654562293757250829/', 'watch link');
+eq($parsed['tables']['tiktok_watch_history'][0]['Link'], 'https://www.tiktokv.com/share/video/7000000000000000029/', 'watch link');
 eq(isset($parsed['tables']['deleted row count']), false, 'scalar keys not tables');
 eq($parsed['deleted']['tiktok_watch_history'], 0, 'deleted count captured (zero)');
 ```
@@ -332,20 +332,20 @@ In `src/Ddp.php`, delete `DDP_SECTION_ORDER` (its only consumer was the deleted 
 <?php
 require_once __DIR__ . '/../src/bootstrap.php';
 
-eq(analysis_tiktok_video_id('https://www.tiktokv.com/share/video/7654562293757250829/'), '7654562293757250829', 'canonical tiktokv share');
-eq(analysis_tiktok_video_id('https://www.tiktok.com/@user/video/7654562293757250829'), '7654562293757250829', 'canonical @user form');
+eq(analysis_tiktok_video_id('https://www.tiktokv.com/share/video/7000000000000000029/'), '7000000000000000029', 'canonical tiktokv share');
+eq(analysis_tiktok_video_id('https://www.tiktok.com/@user/video/7000000000000000029'), '7000000000000000029', 'canonical @user form');
 eq(analysis_tiktok_video_id('https://vm.tiktok.com/abc123/'), null, 'short link not canonical');
 eq(analysis_tiktok_video_id('not a url'), null, 'garbage not canonical');
 
-$links = analysis_row_links('tiktok', ['Link' => 'https://www.tiktokv.com/share/video/7654562293757250829/']);
+$links = analysis_row_links('tiktok', ['Link' => 'https://www.tiktokv.com/share/video/7000000000000000029/']);
 eq(count($links), 1, 'tiktok row with canonical link gets one analysis link');
-check(str_contains($links[0]['url'], 'transcript.php?vid=7654562293757250829'), 'link targets transcript page');
-eq(analysis_row_links('instagram', ['Link' => 'https://www.tiktokv.com/share/video/7654562293757250829/']), [], 'non-tiktok platform gets no transcript link');
+check(str_contains($links[0]['url'], 'transcript.php?vid=7000000000000000029'), 'link targets transcript page');
+eq(analysis_row_links('instagram', ['Link' => 'https://www.tiktokv.com/share/video/7000000000000000029/']), [], 'non-tiktok platform gets no transcript link');
 eq(analysis_row_links('tiktok', ['Comment' => 'hi']), [], 'row without entity id gets no link');
 
 // transcript path resolution via legacy transcripts_dir (config.test.php)
-$tp = analysis_transcript_paths('7654562293757250829');
-check($tp['txt'] !== null && str_ends_with($tp['txt'], '/29/7654562293757250829.txt'), 'sharded txt path resolved');
+$tp = analysis_transcript_paths('7000000000000000029');
+check($tp['txt'] !== null && str_ends_with($tp['txt'], '/29/7000000000000000029.txt'), 'sharded txt path resolved');
 $missing = analysis_transcript_paths('1111111111111111111');
 eq($missing['txt'], null, 'missing transcript -> null txt');
 ```
@@ -1205,7 +1205,7 @@ eq($r['flash'][0]['kind'], 'ok', 'flow upload accepted');
 check(str_contains($r['flash'][0]['text'], 'TikTok'), 'upload confirmation names platform');
 
 $r = inst_handle_setup_post(['action' => 'save_source', 'csrf' => csrf_token(),
-    'source_mode' => 'yoda', 'study_name' => 'Crime study',
+    'source_mode' => 'yoda', 'study_name' => 'Example study',
     'collection' => '/nluu10p/home/research-x', 'access_code' => 'TICKET123'], []);
 eq($r['flash'][0]['kind'], 'ok', 'yoda source saved');
 eq(inst_load()['source_mode'], 'yoda', 'instance saved');
@@ -1420,7 +1420,7 @@ check(!str_contains($html, 'participant.php?id=preview'), 'index does not list s
 $html = render_page('participant.php', ['id' => 'p1', 'seed' => '1', 'n' => '1']);
 check(str_contains($html, 'tiktok_watch_history') || str_contains($html, 'Tiktok watch history'), 'participant shows watch history table');
 check(str_contains($html, 'Igual estoy yo') || str_contains($html, 'second comment'), 'comment text rendered generically');
-check(str_contains($html, 'transcript.php?vid=7654562293757250829'), 'video row links to transcript via analysis module');
+check(str_contains($html, 'transcript.php?vid=7000000000000000029'), 'video row links to transcript via analysis module');
 check(str_contains($html, 'seed=2'), 'reshuffle link bumps seed');
 check(str_contains($html, '<h2>') && str_contains(strtolower($html), 'tiktok'), 'platform heading present');
 

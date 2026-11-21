@@ -55,6 +55,7 @@ tbody tr:hover td { background:#efede2; }
 .url { font-family:var(--mono); font-size:.78rem; color:var(--ink-soft); overflow-wrap:anywhere; }
 .rows td { overflow-wrap:anywhere; }
 .actions { font-family:var(--sans); font-size:.8rem; white-space:nowrap; }
+.actions .reason { color:var(--mute); }
 
 /* --- section furniture (participant page) ----------------------------- */
 .count { font:400 .78rem var(--sans); color:var(--mute); margin-left:.4rem; }

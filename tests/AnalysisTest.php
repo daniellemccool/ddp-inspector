@@ -2,30 +2,30 @@
 putenv('DDP_INSPECTOR_CONFIG=' . __DIR__ . '/config.test.php');
 require_once __DIR__ . '/../src/bootstrap.php';
 
-eq(analysis_tiktok_video_id('https://www.tiktokv.com/share/video/7654562293757250829/'), '7654562293757250829', 'canonical tiktokv share');
-eq(analysis_tiktok_video_id('https://www.tiktok.com/@user/video/7654562293757250829'), '7654562293757250829', 'canonical @user form');
+eq(analysis_tiktok_video_id('https://www.tiktokv.com/share/video/7000000000000000029/'), '7000000000000000029', 'canonical tiktokv share');
+eq(analysis_tiktok_video_id('https://www.tiktok.com/@user/video/7000000000000000029'), '7000000000000000029', 'canonical @user form');
 eq(analysis_tiktok_video_id('https://vm.tiktok.com/abc123/'), null, 'short link not canonical');
 eq(analysis_tiktok_video_id('not a url'), null, 'garbage not canonical');
 
-$links = analysis_row_links('tiktok', ['Link' => 'https://www.tiktokv.com/share/video/7654562293757250829/']);
+$links = analysis_row_links('tiktok', ['Link' => 'https://www.tiktokv.com/share/video/7000000000000000029/']);
 eq(count($links), 1, 'tiktok row with canonical link gets one analysis link');
-check(str_contains($links[0]['url'], 'transcript.php?vid=7654562293757250829'), 'link targets transcript page');
-eq(analysis_row_links('instagram', ['Link' => 'https://www.tiktokv.com/share/video/7654562293757250829/']), [], 'non-tiktok platform gets no transcript link');
+check(str_contains($links[0]['url'], 'transcript.php?vid=7000000000000000029'), 'link targets transcript page');
+eq(analysis_row_links('instagram', ['Link' => 'https://www.tiktokv.com/share/video/7000000000000000029/']), [], 'non-tiktok platform gets no transcript link');
 eq(analysis_row_links('tiktok', ['Comment' => 'hi']), [], 'row without entity id gets no link');
 
 // transcript path resolution via legacy transcripts_dir (config.test.php)
-$tp = analysis_transcript_paths('7654562293757250829');
-check($tp['txt'] !== null && str_ends_with($tp['txt'], '/29/7654562293757250829.txt'), 'sharded txt path resolved');
+$tp = analysis_transcript_paths('7000000000000000029');
+check($tp['txt'] !== null && str_ends_with($tp['txt'], '/29/7000000000000000029.txt'), 'sharded txt path resolved');
 $missing = analysis_transcript_paths('1111111111111111111');
 eq($missing['txt'], null, 'missing transcript -> null txt');
 
 // row filtering by available artifacts: linked+available and unlinkable stay
 $rows = [
-    ['Link' => 'https://www.tiktokv.com/share/video/7654562293757250829/'],
-    ['Link' => 'https://www.tiktokv.com/share/video/7640857640611925279/'],
+    ['Link' => 'https://www.tiktokv.com/share/video/7000000000000000029/'],
+    ['Link' => 'https://www.tiktokv.com/share/video/7000000000000000279/'],
     ['Comment' => 'no link at all'],
 ];
-[$kept, $hidden] = analysis_filter_rows_with_artifacts('tiktok', $rows, ['7654562293757250829' => true]);
+[$kept, $hidden] = analysis_filter_rows_with_artifacts('tiktok', $rows, ['7000000000000000029' => true]);
 eq(count($kept), 2, 'filter keeps available + unlinkable rows');
 eq($hidden, 1, 'filter hides untranscribed linked row');
 [$kept2, $hidden2] = analysis_filter_rows_with_artifacts('instagram', $rows, []);

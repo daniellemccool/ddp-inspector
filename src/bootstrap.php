@@ -5,6 +5,8 @@ require_once __DIR__ . '/Sample.php';
 require_once __DIR__ . '/Instance.php';
 require_once __DIR__ . '/Flows.php';
 require_once __DIR__ . '/Analysis.php';
+require_once __DIR__ . '/Study.php';
+require_once __DIR__ . '/StudyDb.php';
 
 $__cfg_path = getenv('DDP_INSPECTOR_CONFIG') ?: (__DIR__ . '/../config.php');
 $GLOBALS['__cfg'] = is_file($__cfg_path) ? require $__cfg_path : null;

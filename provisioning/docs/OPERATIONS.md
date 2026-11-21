@@ -40,7 +40,8 @@ Component order in ANY item that includes the inspector:
   the externals (preflight fails otherwise, naming the fix).
 - "Research Drive by Link" is OPTIONAL and not the researcher path (D9);
   add it only when an operator prefers a provision-time mount, and use the
-  app's "folder on this workspace" mode pointed at `/data/<mountdir>`.
+  app's "folder on this workspace" mode pointed at the study's folder
+  under `/data/<mountdir>`.
 - Piggyback notes:
   - **mono items**: mono needs no volume, the inspector DOES — attach a
     small one at launch or preflight fails (by design; no boot-disk
@@ -48,7 +49,15 @@ Component order in ANY item that includes the inspector:
   - **ddp-transcribe items**: add SRC-Nginx (that item is SSH-only today).
     The inspector shares the pipeline volume safely — everything it writes
     lives under `<volume>/ddp-inspector/`. For a co-located viewer, use the
-    app's local mode pointed at the pipeline's `<volume>/inbox`.
+    app's local mode pointed at the study's folder on the volume.
+- Every mode points at the study's TOP folder (Yoda: the folder path;
+  Research Drive: the shared folder; local: the folder on this workspace)
+  and finds the donations under it the same way: donation `*.json` files
+  in the folder itself (Research Drive and local only — a folder of
+  donations, as older setups and the pipeline's `<volume>/inbox` are),
+  else `inbox/*.json`, else the newest `donations/<YYYYMMDD>_<study>.zip`
+  (see §4). Local mode links the inbox to that folder (never writes into
+  it); an export is unpacked into the inspector's own inbox.
   - Components attach to ITEMS, not running workspaces — piggybacking means
     editing the item and launching fresh.
 - Firewall: item defaults (22/80/443) suffice; everything the inspector
@@ -68,7 +77,9 @@ growability first):
 | Study shape | Volume |
 |---|---|
 | Donation-only (mono studies; MBs of JSON) | 10 GB |
-| Crime-policing (transcripts: tars + extracted ≈ 2× tree) | 60–90 GB at campaign end |
+| Transcript-heavy (tars + extracted ≈ 2× tree) | 2–3× the transcript tars |
+| Analysis database declared (Yoda / Research Drive) | 2× the database file + 10 GB (the file plus one temporary copy while a new version replaces it) |
+| Analysis database declared (local folder) | 10 GB (the database is linked, not copied) |
 
 Two volumes attached (e.g. a team's analyses drive alongside ours) → set
 `storage_path` explicitly at launch (S10); auto-detect refuses to guess.
@@ -95,14 +106,14 @@ The researcher supplies three things in Setup:
    `config.yml`), uploaded, or the block pasted. It is stored unchanged
    (`irods_*` keys only, password keys dropped) as `source.json`'s `env`
    and written out as gocmd's `irods_environment.json`. No defaults: each
-   Yoda instance publishes its own host, zone and auth settings (the
-   crime study's is `lp0555.its.uu.nl`, `pam_password`).
+   Yoda instance publishes its own host, zone and auth settings (e.g.
+   `pam_password` login).
 2. **A data access password (DAP)** created in the Yoda portal (not the
    UU password; DAPs expire). Stored in `source.json` (0600, service user)
    and handed to gocmd only via `IRODS_USER_PASSWORD`, never in a file or
    argv. Rotation = create a new DAP, paste it in Setup.
 3. **The folder path**: the full iRODS path, zone and home included
-   (`/nluu10p/home/research-tiktok-crime-policing`).
+   (`/nluu10p/home/research-<group>`).
 
 What the refresh reads under the folder:
 
@@ -114,15 +125,51 @@ What the refresh reads under the folder:
     transcripts-tars/shard-*.tar     optional, pulled whole then unpacked
 
 `inbox/` is preferred when both exist. Size the volume for the transcript
-tars: the crime study's 100 shards are 30.7 GiB, all pulled before
-unpacking.
+tars: all shards are pulled before any is unpacked, so the volume needs
+roughly the tar total plus the unpacked tree.
+
+**Database mode.** When Setup declares an analysis database (a path
+relative to the study folder, e.g. `analysis/out/analysis.sqlite`, the
+Setup default; it names the file, never a folder), the
+refresh fetches ONLY that file, in every source mode: no donations, no
+transcripts or transcript tars, nothing unpacked. The pages read
+everything from the database. While the database is declared but not yet
+fetched, or is not a pipeline analysis database, the pages show only a
+notice: they never fall back to the donations or the transcript tree.
+
+- Yoda: `gocmd ls -l` on the file; Research Drive: `rclone lsl` on it. The
+  listing must name that one file (a folder path is refused as not found,
+  before anything is downloaded). The listing (size and modification
+  time) is compared with the one stored at the last fetch in
+  `state/analysis-db.remote`; the file is downloaded only when the listing
+  differs or the local copy is missing ("The analysis database is up to
+  date." otherwise), and only when the free space under `data/analyses/`
+  is at least the listed size. The download lands in
+  `data/analyses/.analysis-db-staging/` and is renamed over
+  `data/analyses/analysis.sqlite`, so pages never read a partial file; the
+  listing is stored only after that swap.
+- Local folder: `data/analyses/analysis.sqlite` is a symlink to the
+  folder's file; nothing is copied and nothing in the folder is written.
+- The participant count after a refresh is the participants who donated,
+  from the database.
+- On a workspace that used the transcript tars before, the unpacked tree
+  `data/analyses/transcripts/` is never read while a database is declared.
+  Safe order: declare the database in Setup, fetch, check that the pages
+  read it, then delete the old tree.
 
 ## 5. Research Drive share links
 
-Researcher-self-serve in the RD web portal: share the donations folder by
+Researcher-self-serve in the RD web portal: share the study's folder by
 link, READ-ONLY, with a password. The app's Setup asks for the link and
 password and syncs via WebDAV — no CO secrets, no provision-time wiring.
 Rotation = create a new link, paste it in Setup.
+
+The refresh lists the shared folder and pulls only the donations (§2): its
+own `*.json` files (an older share of the donations folder itself), else
+`inbox/*.json`, else the newest `donations/*.zip` (copied to the cache,
+unpacked, removed). Only one level deep — subfolders are never pulled
+along. With an analysis database declared, it pulls only that file
+(database mode, §4).
 
 ## 6. Debugging a refresh
 
@@ -136,6 +183,23 @@ Operator path (all researcher-visible state lives on the volume):
 
 The refresh is flock-serialized and idempotent — re-running after any
 failure is always safe.
+
+**Database mode (§4):** the log says `analysis database up to date` or
+`fetching the analysis database (<size>)` then
+`fetched the analysis database (<bytes> bytes)`. To force a re-fetch
+(e.g. a suspect local copy), delete the stored listing and refresh:
+
+    sudo rm <storage_root>/ddp-inspector/state/analysis-db.remote
+
+A failed download leaves the previous database in place and no staging
+files behind. "The analysis database was not found at <path> in the study
+folder" means the declared path does not exist under the study folder,
+or names a folder rather than the file: fix the path in Settings. "Could
+not reach the data store to check the analysis database" is a failed
+listing for another reason (network, server); the gocmd/rclone error is in
+the log. "There isn't enough room on the storage volume…" means the free
+space under `data/analyses/` is below the database size: grow the volume
+(§3) or free space on it.
 
 **Site down with ERR_CONNECTION_REFUSED:** check `sudo systemctl status
 nginx`. SRC-Nginx's `authentication.conf` proxies to
@@ -152,9 +216,8 @@ self-heals on workspaces provisioned or updated after that fix.
 2. Append the ddp-inspector component (Development) to the sandbox item —
    first integration launch; verify auto-detect ignores the RD-by-Link
    fuse mount if present.
-3. Crime-study viewer: yoda mode against the campaign collection; verify
-   participant `69f39df5fdef5b2e2a84011b` shows watch 90,466 /
-   favorites 5,384 / likes 2,973 / shares 55 / comments 30.
+3. First real study: yoda mode against its collection; verify one
+   hand-checked participant's per-section row counts.
 4. Record a validation log from day one.
 
 Live-validation results (2026-07-30, sandbox): `gocmd sync` REJECTS `-T`
@@ -163,11 +226,11 @@ the refresh script pulls with `get -f` everywhere (re-download, not delta
 sync). SRC-Nginx on Ubuntu 24.04 and the php8.3-fpm socket path are
 verified live on the deployed image.
 
-Live-validation results (2026-11-20, `ddpinspector.perceptionsofcr`):
-Yoda login with the researcher's own portal configuration + DAP via
-`IRODS_USER_PASSWORD` connects from the workspace and fetches; the crime
-study's export zip yields 143 donation files (142 real + test participant
-`laura2`, hide it in the UI). The 2026-07 ticket-era results above are
+Live-validation results (2026-11-20): Yoda login with the researcher's own
+portal configuration + DAP via `IRODS_USER_PASSWORD` connects from a
+workspace and fetches; a real Next export zip extracts correctly (test
+participants in an export show up like any other — hide them in the UI).
+The 2026-07 ticket-era results above are
 client-side flag findings only — anonymous login never worked.
 
 ## 8. Updating a running workspace

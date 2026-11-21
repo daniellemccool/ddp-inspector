@@ -56,7 +56,7 @@ if ($storageMode) { csrf_token(); }
       <label class="choice-head"><input type="radio" name="source_mode" value="rd-link" <?= ($inst['source_mode'] ?? '') === 'rd-link' ? 'checked' : '' ?>>
         SURF Research Drive</label>
       <div class="choice-body">
-        In Research Drive: ① right-click the folder with donations and choose “Share link”,
+        In Research Drive: ① right-click the study's folder and choose “Share link”,
         ② set it to <em>read only</em> and add a password, ③ paste the link and password here.
         <label class="field">Share link <input name="share_link" placeholder="https://researchdrive…/s/…"></label>
         <label class="field">Password <input type="password" name="link_password" <?= inst_source_exists() ? 'placeholder="saved ✓"' : '' ?>></label>
@@ -80,9 +80,9 @@ if ($storageMode) { csrf_token(); }
       <div class="choice-body">
         <?php $localCandidates = inst_local_folder_candidates(); ?>
         <?php if ($localCandidates !== []): ?>
-          Folders with donation files found on this workspace — click the field to pick one.
+          Pick the study's folder. Folders with donation files found on this workspace are listed — click the field to choose one.
         <?php endif; ?>
-        <label class="field">Folder <input name="local_path" list="local-folders" value="<?= h((string)($inst['local_path'] ?? '')) ?>"></label>
+        <label class="field">The study's folder <input name="local_path" list="local-folders" value="<?= h((string)($inst['local_path'] ?? '')) ?>"></label>
         <?php if ($localCandidates !== []): ?>
           <datalist id="local-folders">
             <?php foreach ($localCandidates as $c): ?><option value="<?= h($c) ?>"></option><?php endforeach; ?>
@@ -90,6 +90,12 @@ if ($storageMode) { csrf_token(); }
         <?php endif; ?>
       </div>
     </div>
+    <?php $adb = $inst['analyses']['database'] ?? []; ?>
+    <h3>Analyses</h3>
+    <p><label class="meta"><input type="checkbox" name="analysis_db_enabled" value="1" <?= !empty($adb['enabled']) ? 'checked' : '' ?>>
+      This study has an analysis database</label></p>
+    <label class="field">Path in the study's folder
+      <input name="analysis_db_path" value="<?= h((string)($adb['path'] ?? 'analysis/out/analysis.sqlite')) ?>"></label>
     <p><label class="meta"><input type="checkbox" name="cadence" value="daily" <?= ($inst['cadence'] ?? '') === 'daily' ? 'checked' : '' ?>>
       Check for new donations automatically every day</label></p>
     <button>Save</button>

@@ -15,9 +15,13 @@ if (!preg_match('/^\d{19}$/D', $vid)) {
     return;
 }
 
-$paths = analysis_transcript_paths($vid);
-$txt = $paths['txt'] !== null ? file_get_contents($paths['txt']) : null;
-$meta = $paths['json'] !== null ? json_decode((string)file_get_contents($paths['json']), true) : null;
+// A declared database that is not usable: the page shows only the notice.
+$notice = study_db_notice();
+$transcript = $notice === null ? study_transcript($vid) : null;
+$txt = $transcript['text'] ?? null;
+$meta = $transcript['meta'] ?? null;
+$reason = ($txt === null && $meta === null && is_string($transcript['availability'] ?? null))
+    ? study_availability_label($transcript['availability']) : null;
 
 /**
  * Segment text + average token confidence, skipping special tokens
@@ -48,8 +52,14 @@ $seg_info = function (array $seg): array {
     <nav class="crumbs"><a href="<?= h(url('index.php')) ?>">← all participants</a></nav>
   </header>
   <h1>Video <span class="id"><?= h($vid) ?></span></h1>
-  <?php if ($txt === null && $meta === null): ?>
-    <p class="notice">Not transcribed yet.</p>
+  <?php if ($notice !== null): ?>
+    <p class="notice"><?= h($notice) ?></p>
+  <?php elseif ($txt === null && $meta === null): ?>
+    <?php if ($reason !== null): ?>
+      <p class="notice">No transcript: <?= h($reason) ?>.</p>
+    <?php else: ?>
+      <p class="notice">Not transcribed yet.</p>
+    <?php endif; ?>
   <?php else: ?>
     <?php
       $vm = is_array($meta['video_metadata'] ?? null) ? $meta['video_metadata'] : [];

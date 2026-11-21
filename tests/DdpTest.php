@@ -11,7 +11,7 @@ eq(ddp_participant_id_from_filename('/x/no-segment.json'), 'no-segment', 'partic
 $parsed = ddp_parse_file($p1);
 eq(is_array($parsed), true, 'parse returns array for conforming file');
 eq(count($parsed['tables']['tiktok_watch_history']), 3, 'watch history rows');
-eq($parsed['tables']['tiktok_watch_history'][0]['Link'], 'https://www.tiktokv.com/share/video/7654562293757250829/', 'watch link');
+eq($parsed['tables']['tiktok_watch_history'][0]['Link'], 'https://www.tiktokv.com/share/video/7000000000000000029/', 'watch link');
 eq(isset($parsed['tables']['deleted row count']), false, 'scalar keys not tables');
 eq($parsed['deleted']['tiktok_watch_history'], 0, 'deleted count captured (zero)');
 
@@ -26,7 +26,7 @@ eq($p3['deleted']['x_b'], 0, 'multi-table entry: ambiguous deleted count refused
 eq(count($p3['tables']['x_a']), 1, 'multi-table entry: x_a rows still parsed');
 eq(count($p3['tables']['x_b']), 1, 'multi-table entry: x_b rows still parsed');
 
-$meta = ddp_file_meta('/x/assignment=406_task=954_participant=abc_source=instagram_key=1783300000002-instagram.json');
+$meta = ddp_file_meta('/x/assignment=900_task=901_participant=abc_source=instagram_key=1783300000002-instagram.json');
 eq($meta['participant'], 'abc', 'meta participant');
 eq($meta['source'], 'instagram', 'meta source');
 eq($meta['key_millis'], 1783300000002, 'meta key millis');
@@ -73,7 +73,7 @@ eq(ddp_load_participant($dir, '../../etc'), null, 'targeted load: unsafe id reje
 eq(ddp_load_participant($dir, ''), null, 'targeted load: empty id rejected');
 
 // --- transcript coverage counting (ctx) --------------------------------------
-$ctx = ['ids' => ['7654562293757250829' => true], 'fp' => 'test-fp'];
+$ctx = ['ids' => ['7000000000000000029' => true], 'fp' => 'test-fp'];
 $sumCtx = ddp_summarize_file($p1, $ctx);
 check(($sumCtx['videos_total'] ?? 0) >= 2, 'ctx: linked videos counted');
 eq($sumCtx['videos_transcribed'] ?? null, 1, 'ctx: available transcript counted');

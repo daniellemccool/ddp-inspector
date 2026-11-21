@@ -3,9 +3,8 @@ require_once __DIR__ . '/../src/bootstrap.php';
 if (!cfg_ready()) { http_response_code(500); echo 'Configuration missing. Copy config.php.example to config.php.'; return; }
 if (!guard_configured()) { return; }
 
-$txIds = analysis_available_ids('transcripts');
-$ctx = ['ids' => $txIds, 'fp' => analysis_ids_fingerprint($txIds)];
-$loaded = ddp_load_dir_summaries((string)inst_effective_ddp_dir(), $ctx);
+$loaded = study_participants();
+$notice = study_db_notice();
 $showAll = ($_GET['all'] ?? '') === '1';
 $status = inst_status();
 $storageMode = inst_root() !== null;
@@ -26,12 +25,14 @@ foreach ($loaded['participants'] as $p) {
 
 // Skip classification: declined donations and empty uploads are normal
 // campaign artifacts — summarize them quietly, expandable for detail.
-$skipKinds = ['declined' => 0, 'empty' => 0, 'invalid' => 0];
+$skipKinds = ['declined' => 0, 'empty' => 0, 'invalid' => 0, 'not_donated' => 0, 'declined_consent' => 0];
 foreach ($loaded['skipped'] as $s) { $skipKinds[$s['kind'] ?? 'invalid']++; }
 $skipBits = [];
 if ($skipKinds['declined']) { $skipBits[] = $skipKinds['declined'] . ' declined donation(s)'; }
 if ($skipKinds['empty'])    { $skipBits[] = $skipKinds['empty'] . ' empty file(s)'; }
 if ($skipKinds['invalid'])  { $skipBits[] = $skipKinds['invalid'] . ' unreadable file(s)'; }
+if ($skipKinds['not_donated']) { $skipBits[] = $skipKinds['not_donated'] . ' consented, did not donate'; }
+if ($skipKinds['declined_consent']) { $skipBits[] = $skipKinds['declined_consent'] . ' declined consent'; }
 // The form below calls csrf_field() well after HTML output has started; force the
 // CSRF cookie to be issued now, before any output is sent (setcookie() is a no-op
 // once headers are sent — see Task 10 carry-forward constraint).
@@ -50,12 +51,16 @@ if ($storageMode) { csrf_token(); }
     <?php endif; ?>
   </header>
   <h1>Participants</h1>
+  <?php if ($notice !== null): ?><p class="notice"><?= h($notice) ?></p><?php endif; ?>
   <?php if ($storageMode): ?>
     <div class="toolbar">
-      <p class="meta">
-        <?php if (!empty($status['finished_at'])): ?>Last updated <?= h((string)$status['finished_at']) ?> ·<?php endif; ?>
-        <?= inst_donation_count() ?> donation file(s)
-      </p>
+      <p class="meta"><?php
+        // Database mode counts participants who donated; raw mode counts files.
+        // No count while the notice applies: there is nothing to count yet.
+        $metaBits = [];
+        if (!empty($status['finished_at'])) { $metaBits[] = 'Last updated ' . h((string)$status['finished_at']); }
+        if ($notice === null) { $metaBits[] = study_donation_count() . (study_mode() === 'database' ? ' donation(s)' : ' donation file(s)'); }
+        echo implode(' · ', $metaBits); ?></p>
       <form method="post" action="<?= h(url('setup.php')) ?>">
         <?= csrf_field() ?><input type="hidden" name="action" value="refresh_now">
         <button>Check for new donations</button>
@@ -65,13 +70,14 @@ if ($storageMode) { csrf_token(); }
       <p class="skipped"><?= h((string)$status['message']) ?></p>
     <?php endif; ?>
   <?php endif; ?>
+  <?php if ($notice === null): ?>
   <?php if ($loaded['skipped']): ?>
     <details class="skipped">
-      <summary>⚠ <?= count($loaded['skipped']) ?> file(s) set aside — <?= h(implode(', ', $skipBits)) ?></summary>
+      <summary>⚠ <?= count($loaded['skipped']) ?> <?= study_mode() === 'database' ? '' : 'file(s) ' ?>set aside — <?= h(implode(', ', $skipBits)) ?></summary>
       <ul>
       <?php foreach ($loaded['skipped'] as $s): ?>
-        <li><?= h($s['participant']) ?> — <?= h($s['kind'] === 'declined' ? 'declined to donate' : ($s['kind'] === 'empty' ? 'empty upload' : 'unreadable file')) ?>
-          <span class="meta">(<?= h($s['path']) ?>)</span></li>
+        <li><?= h($s['participant']) ?> — <?= h(match ($s['kind']) { 'declined' => 'declined to donate', 'empty' => 'empty upload', 'not_donated' => 'consented, did not donate', 'declined_consent' => 'declined consent', default => 'unreadable file' }) ?>
+          <?php if ($s['path'] !== ''): ?><span class="meta">(<?= h($s['path']) ?>)</span><?php endif; ?></li>
       <?php endforeach; ?>
       </ul>
     </details>
@@ -113,5 +119,6 @@ if ($storageMode) { csrf_token(); }
     <?php endforeach; ?>
     </tbody>
   </table>
+  <?php endif; ?>
   <?php endif; ?>
 </main>
