@@ -143,6 +143,15 @@ check(str_contains($dbPageAll, '<span class="reason">removed or private</span>')
 check(str_contains($dbPageAll, 'example.test/v/unresolved'), 'db participant page shows the NULL-video row');
 $dbPagePb = render_page('participant.php', ['id' => 'pb', 'seed' => '1', 'n' => '15']);
 check(str_contains($dbPagePb, 'submitted 2 files; the first one with data is shown'), 'db participant page shows the repeat-submission note');
+$dbTx = render_page('transcript.php', ['vid' => '7000000000000001001']);
+check(str_contains($dbTx, 'Hello world'), 'db transcript page: text');
+check(str_contains($dbTx, 'Segment confidence') && str_contains($dbTx, '0.75'), 'db transcript page: segment confidence');
+check(str_contains($dbTx, '@uploader_a') && str_contains($dbTx, 'watch on TikTok'), 'db transcript page: metadata');
+$dbTxGated = render_page('transcript.php', ['vid' => '7000000000000001004']);
+check(str_contains($dbTxGated, 'not available in this region') && !str_contains(strtolower($dbTxGated), 'not transcribed yet'), 'db transcript page: untranscribed reason');
+$dbTxNone = render_page('transcript.php', ['vid' => '1111111111111111111']);
+check(str_contains(strtolower($dbTxNone), 'not transcribed yet'), 'db transcript page: unknown id');
+check(str_contains(render_page('transcript.php', ['vid' => '../etc/passwd']), '400'), 'db transcript page: malformed id -> 400');
 $dbMissing = render_page('participant.php', ['id' => 'nobody']);
 check(str_contains($dbMissing, 'not found') || str_contains($dbMissing, '404'), 'db participant page: unknown id -> not found');
 study_reset();

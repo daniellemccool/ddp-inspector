@@ -303,6 +303,24 @@ $GLOBALS['__cfg'] = ['ddp_dir' => __DIR__ . '/fixtures/ddp', 'analysis_db' => $d
 study_reset();
 eq(study_mode(), 'database', 'db list: developer-mode database');
 eq(array_keys(study_participants()['participants']), ['pa', 'pb', 'pc'], 'db list: developer mode computes without a cache');
+// Database transcript.
+$dt = study_transcript('7000000000000001001');
+eq($dt['text'] ?? null, 'Hello world', 'db transcript: text');
+eq($dt['availability'] ?? null, 'transcribed', 'db transcript: availability');
+eq($dt['meta']['language_detected'] ?? null, 'en', 'db transcript: language');
+eq($dt['meta']['duration_s'] ?? null, 12.1, 'db transcript: duration');
+eq($dt['meta']['source_url'] ?? null, 'https://example.test/v/7000000000000001001', 'db transcript: source url');
+eq($dt['meta']['video_metadata']['uploader'] ?? null, 'uploader_a', 'db transcript: uploader');
+eq($dt['meta']['video_metadata']['view_count'] ?? null, 1000, 'db transcript: view count');
+eq($dt['meta']['raw_signals']['segments'][0]['tokens'][1]['text'] ?? null, ' Hello', 'db transcript: raw_signals decoded');
+$dt9 = study_transcript('7000000000000001009');
+check(array_key_exists('raw_signals', $dt9['meta']) && $dt9['meta']['raw_signals'] === null, 'db transcript: NULL raw_signals -> null');
+check(array_key_exists('source_url', $dt9['meta']) && $dt9['meta']['source_url'] === null, 'db transcript: no process row -> null source url');
+$dg = study_transcript('7000000000000001004');
+eq([$dg['text'], $dg['meta'], $dg['availability']], [null, null, 'region_gated'], 'db transcript: untranscribed video');
+eq(study_transcript('1111111111111111111'), ['text' => null, 'meta' => null, 'availability' => null], 'db transcript: unknown video');
+eq(study_transcript('abc'), null, 'db transcript: malformed id');
+
 // Raw backend (developer config: fixture donations + transcripts tree, no database).
 $GLOBALS['__cfg'] = require __DIR__ . '/config.test.php';
 study_reset();

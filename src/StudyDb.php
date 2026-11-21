@@ -237,3 +237,38 @@ function study_db_participant_compute(PDO $db, string $id, int $n, int $seed, bo
         'sections' => $out,
     ]]];
 }
+
+/** One video's transcript from the database, in the raw artifact's shape; null
+ *  for a malformed id, no database, or a database error (logged). A video known
+ *  only from `video` yields null text and meta with its availability set. */
+function study_db_transcript(string $vid): ?array {
+    if (!preg_match('/^\d{19}$/D', $vid)) { return null; }
+    $db = study_db();
+    if ($db === null) { return null; }
+    try {
+        $st = $db->prepare('SELECT t.transcript, t.language, t.audio_duration_s, t.raw_signals, p.source_url,'
+            . ' v.availability, v.description, v.uploader, v.created_at, v.view_count, v.like_count,'
+            . ' v.comment_count, v.metadata_fetched_at, (t.video_id IS NOT NULL) AS has_tx, (v.video_id IS NOT NULL) AS has_video'
+            . ' FROM (SELECT :vid AS video_id) q'
+            . ' LEFT JOIN transcription t ON t.video_id = q.video_id'
+            . ' LEFT JOIN video v ON v.video_id = q.video_id'
+            . ' LEFT JOIN transcription_process p ON p.video_id = q.video_id');
+        $st->execute([':vid' => $vid]);
+        $r = $st->fetch();
+    } catch (PDOException $e) {
+        error_log('DDP Inspector: analysis database error (transcript page): ' . $e->getMessage());
+        return null;
+    }
+    $availability = $r['has_video'] ? ($r['availability'] === null ? null : (string)$r['availability']) : null;
+    if (!$r['has_tx']) { return ['text' => null, 'meta' => null, 'availability' => $availability]; }
+    $vm = array_filter([
+        'video_description' => $r['description'], 'uploader' => $r['uploader'], 'video_created_at' => $r['created_at'],
+        'view_count' => $r['view_count'], 'like_count' => $r['like_count'], 'comment_count' => $r['comment_count'],
+        'metadata_fetched_at' => $r['metadata_fetched_at'],
+    ], fn($v) => $v !== null);
+    $signals = $r['raw_signals'] === null ? null : json_decode((string)$r['raw_signals'], true);
+    $meta = ['video_id' => $vid, 'source_url' => $r['source_url'], 'language_detected' => $r['language'],
+        'duration_s' => $r['audio_duration_s'], 'raw_signals' => is_array($signals) ? $signals : null];
+    if ($vm !== []) { $meta['video_metadata'] = $vm; }
+    return ['text' => $r['transcript'] === null ? '' : (string)$r['transcript'], 'meta' => $meta, 'availability' => $availability];
+}

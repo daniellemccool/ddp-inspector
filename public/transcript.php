@@ -18,6 +18,8 @@ if (!preg_match('/^\d{19}$/D', $vid)) {
 $transcript = study_transcript($vid);
 $txt = $transcript['text'] ?? null;
 $meta = $transcript['meta'] ?? null;
+$reason = ($txt === null && $meta === null && is_string($transcript['availability'] ?? null))
+    ? study_availability_label($transcript['availability']) : null;
 
 /**
  * Segment text + average token confidence, skipping special tokens
@@ -49,7 +51,11 @@ $seg_info = function (array $seg): array {
   </header>
   <h1>Video <span class="id"><?= h($vid) ?></span></h1>
   <?php if ($txt === null && $meta === null): ?>
-    <p class="notice">Not transcribed yet.</p>
+    <?php if ($reason !== null): ?>
+      <p class="notice">No transcript: <?= h($reason) ?>.</p>
+    <?php else: ?>
+      <p class="notice">Not transcribed yet.</p>
+    <?php endif; ?>
   <?php else: ?>
     <?php
       $vm = is_array($meta['video_metadata'] ?? null) ? $meta['video_metadata'] : [];

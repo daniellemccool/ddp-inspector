@@ -151,6 +151,7 @@ function study_participant(string $id, int $n, int $seed, bool $all): ?array {
  */
 function study_transcript(string $vid): ?array {
     if (!preg_match('/^\d{19}$/D', $vid)) { return null; }
+    if (study_mode() === 'database') { return study_db_transcript($vid); }
     return study_raw_transcript($vid);
 }
 
