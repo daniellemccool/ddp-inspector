@@ -161,6 +161,142 @@ ob_start(); include __DIR__ . '/../public/index.php'; $errIndex = ob_get_clean()
 check($errIndex !== '' && !str_contains($errIndex, 'Fatal error'), 'db error: index.php still renders');
 ini_set('error_log', $prevLog === false ? '' : $prevLog);
 
+// ---- Database backend: participant page ----
+$GLOBALS['__cfg'] = ['storage_root' => $sc, 'default_n' => 15, 'base_path' => ''];
+study_test_build_db($dbfile);
+exec('rm -rf ' . escapeshellarg("$sc/config/flows"));
+study_reset();
+eq(study_mode(), 'database', 'db page: database mode');
+function study_test_section(?array $p, string $key): ?array {
+    foreach ($p['platforms']['tiktok']['sections'] ?? [] as $s) { if ($s['key'] === $key) { return $s; } }
+    return null;
+}
+/** Sample rows keyed by their Link cell. */
+function study_test_by_link(?array $sec): array {
+    $out = [];
+    foreach ($sec['sample'] ?? [] as $it) { $out[$it['row']['Link'] ?? ''] = $it; }
+    return $out;
+}
+
+eq(study_availability_label('transcribed'), null, 'label: transcribed has no reason');
+eq(study_availability_label('removed_or_private'), 'removed or private', 'label: removed_or_private');
+eq(study_availability_label('removed'), 'removed', 'label: removed');
+eq(study_availability_label('region_gated'), 'not available in this region', 'label: region_gated');
+eq(study_availability_label('login_gated'), 'needs a TikTok login', 'label: login_gated');
+eq(study_availability_label('photo_no_audio'), 'photo post without audio', 'label: photo_no_audio');
+eq(study_availability_label('retries_exhausted'), 'could not be fetched', 'label: retries_exhausted');
+eq(study_availability_label('not_attempted'), 'not fetched (only liked, favorited or shared)', 'label: not_attempted');
+
+$dp = study_participant('pa', 15, 1, false);
+check(is_array($dp), 'db page: known participant returns data');
+eq($dp['id'] ?? null, 'pa', 'db page: id');
+eq(array_keys($dp['platforms'] ?? []), ['tiktok'], 'db page: tiktok platform');
+$dpt = $dp['platforms']['tiktok'] ?? [];
+eq($dpt['title'] ?? null, 'Tiktok', 'db page: platform title falls back without flows');
+eq($dpt['notes'] ?? null, [], 'db page: no note for a single submission');
+eq(array_keys($dpt['scope'] ?? []), ['tiktok_comments', 'tiktok_favorite_videos', 'tiktok_share_history', 'tiktok_watch_history'],
+   'db page: scope lists non-NULL sections only (like is NULL)');
+eq($dpt['scope']['tiktok_watch_history'] ?? null, ['count' => 4,
+   'earliest' => gmmktime(10, 0, 0, 1, 15, 2026), 'latest' => gmmktime(10, 10, 0, 1, 15, 2026)],
+   'db page: scope count from n_watch, range ignores the NULL watched_at');
+eq(array_column($dpt['sections'] ?? [], 'key'), ['tiktok_comments', 'tiktok_favorite_videos', 'tiktok_share_history', 'tiktok_watch_history'],
+   'db page: sections in raw-mode order (unmatched, sorted)');
+$w = study_test_section($dp, 'tiktok_watch_history');
+eq([$w['title'] ?? null, $w['description'] ?? null, $w['columns'] ?? null], ['Tiktok watch history', '', ['Date', 'Link']],
+   'db page: unmatched watch section uses prettified key and the donated row keys');
+eq([$w['total'] ?? null, $w['with_artifacts'] ?? null, $w['hidden'] ?? null, $w['deleted'] ?? null], [4, 1, 3, 0],
+   'db page: all=false pool is transcribed rows; untranscribed and NULL-video rows hidden');
+eq($w['sample'] ?? null, [['row' => ['Date' => '2026-01-15 10:00:00', 'Link' => 'https://example.test/v/7000000000000001001'],
+   'links' => [['label' => 'transcript', 'url' => 'transcript.php?vid=7000000000000001001']], 'reason' => null]],
+   'db page: only the transcribed row is sampled, with its transcript link');
+$f = study_test_section($dp, 'tiktok_favorite_videos');
+eq([$f['total'] ?? null, $f['with_artifacts'] ?? null, $f['hidden'] ?? null, $f['deleted'] ?? null, $f['sample'] ?? null], [2, 0, 2, 1, []],
+   'db page: favorites none transcribed, deleted from deleted_favorite');
+$sh = study_test_section($dp, 'tiktok_share_history');
+eq($sh['columns'] ?? null, ['Date', 'Link', 'Method', 'SharedContent'], 'db page: share row keys');
+$cm = study_test_section($dp, 'tiktok_comments');
+eq([$cm['total'] ?? null, $cm['with_artifacts'] ?? null, $cm['hidden'] ?? null, $cm['columns'] ?? null], [1, 1, 0, ['Comment', 'Date']],
+   'db page: comments have no video, so the filter keeps them');
+eq($cm['sample'] ?? null, [['row' => ['Comment' => 'first synthetic comment', 'Date' => '2026-01-15 13:00:00'], 'links' => [], 'reason' => null]],
+   'db page: comment row');
+
+$da = study_participant('pa', 15, 1, true);
+$wa = study_test_section($da, 'tiktok_watch_history');
+eq([$wa['total'] ?? null, $wa['with_artifacts'] ?? null, $wa['hidden'] ?? null, count($wa['sample'] ?? [])], [4, 4, 0, 4],
+   'db page: all=true pools every row and hides nothing');
+$wl = study_test_by_link($wa);
+eq($wl['https://example.test/v/7000000000000001001'] ?? null, ['row' => ['Date' => '2026-01-15 10:00:00',
+   'Link' => 'https://example.test/v/7000000000000001001'], 'links' => [['label' => 'transcript', 'url' => 'transcript.php?vid=7000000000000001001']],
+   'reason' => null], 'db page: transcribed row links its transcript and has no reason');
+eq($wl['https://example.test/v/7000000000000001002'] ?? null, ['row' => ['Date' => '2026-01-15 10:05:00',
+   'Link' => 'https://example.test/v/7000000000000001002'], 'links' => [], 'reason' => 'removed or private'],
+   'db page: untranscribed row carries its reason and no link');
+eq($wl['https://example.test/v/7000000000000001003']['reason'] ?? null, 'removed', 'db page: removed reason');
+eq($wl['https://example.test/v/7000000000000001003']['row']['Date'] ?? null, '1970-01-01 00:00:00', 'db page: Date is the donated string');
+eq($wl['https://example.test/v/unresolved'] ?? null, ['row' => ['Date' => '2026-01-15 10:10:00',
+   'Link' => 'https://example.test/v/unresolved'], 'links' => [], 'reason' => null],
+   'db page: NULL video_id row has no links and no reason');
+$fl = study_test_by_link(study_test_section($da, 'tiktok_favorite_videos'));
+eq([$fl['https://example.test/v/7000000000000001006']['reason'] ?? null, $fl['https://example.test/v/7000000000000001007']['reason'] ?? null],
+   ['photo post without audio', 'could not be fetched'], 'db page: favorite reasons');
+$shl = study_test_by_link(study_test_section($da, 'tiktok_share_history'));
+eq($shl['https://example.test/v/7000000000000001008'] ?? null, ['row' => ['Date' => '2026-01-15 12:00:00',
+   'Link' => 'https://example.test/v/7000000000000001008', 'Method' => 'copy link', 'SharedContent' => 'video'],
+   'links' => [], 'reason' => 'not fetched (only liked, favorited or shared)'], 'db page: share row with method, content and reason');
+
+// Deterministic sampling: same (id, n, seed) twice is identical; reshuffle (seed + 1) changes the order;
+// a smaller n is a prefix of the same order.
+eq(study_participant('pa', 15, 1, true), $da, 'db page: same (id, n, seed) gives the same page');
+$order = fn(?array $p) => array_map(fn($it) => $it['row']['Link'], study_test_section($p, 'tiktok_watch_history')['sample'] ?? []);
+$o1 = $order($da);
+$o2 = $order(study_participant('pa', 15, 2, true));
+check($o1 !== $o2, 'db page: the next seed gives a different order');
+eq(count(array_unique(array_merge($o1, $o2))), 4, 'db page: a different order of the same rows');
+eq($order(study_participant('pa', 2, 1, true)), array_slice($o1, 0, 2), 'db page: n=2 takes the first two of the same order');
+eq(count(study_test_section(study_participant('pa', 2, 1, true), 'tiktok_watch_history')['sample']), 2, 'db page: n limits the sample');
+
+$db_pb = study_participant('pb', 15, 1, true);
+$pbn = $db_pb['platforms']['tiktok']['notes'] ?? [];
+eq(count($pbn), 1, 'db page: repeat submissions produce one note');
+check(str_contains($pbn[0] ?? '', 'submitted 2 files; the first one with data is shown'), 'db page: repeat-submission note text');
+check(array_key_exists('tiktok_favorite_videos', $db_pb['platforms']['tiktok']['scope'] ?? [])
+      && study_test_section($db_pb, 'tiktok_favorite_videos') === null, 'db page: n=0 section is in scope but not listed');
+eq($db_pb['platforms']['tiktok']['scope']['tiktok_favorite_videos'] ?? null, ['count' => 0, 'earliest' => null, 'latest' => null], 'db page: empty scope row');
+eq(study_test_by_link(study_test_section($db_pb, 'tiktok_like_list'))['https://example.test/v/7000000000000001005']['reason'] ?? null,
+   'needs a TikTok login', 'db page: like reason');
+eq(study_test_by_link(study_test_section($db_pb, 'tiktok_watch_history'))['https://example.test/v/7000000000000001004']['reason'] ?? null,
+   'not available in this region', 'db page: region reason');
+
+eq(study_participant("x' OR 1=1 --", 15, 1, false), null, 'db page: malformed id -> null');
+eq(study_participant('nobody', 15, 1, false), null, 'db page: unknown id -> null');
+eq(study_participant('pd', 15, 1, true), null, 'db page: a participant who did not donate -> null');
+
+// With the flow installed, titles, descriptions and column order come from the doc.
+@mkdir("$sc/config/flows/tiktok", 0755, true);
+copy(__DIR__ . '/fixtures/flows/tiktok/documentation.txt', "$sc/config/flows/tiktok/documentation.txt");
+$df = study_participant('pa', 15, 1, false);
+eq($df['platforms']['tiktok']['title'] ?? null, 'TikTok', 'db page: platform title from the flow doc');
+eq(array_column($df['platforms']['tiktok']['sections'] ?? [], 'key'), ['tiktok_watch_history', 'tiktok_comments', 'tiktok_favorite_videos', 'tiktok_share_history'],
+   'db page: doc-matched sections first, in doc order');
+$wf = study_test_section($df, 'tiktok_watch_history');
+eq([$wf['title'] ?? null, $wf['description'] ?? null, $wf['columns'] ?? null], ['Videos you watched', 'Watch history from your TikTok account.', ['Date', 'Link']],
+   'db page: watch section matched to the flow doc');
+$cf3 = study_test_section($df, 'tiktok_comments');
+eq([$cf3['title'] ?? null, $cf3['columns'] ?? null], ['Comments you posted', ['Date', 'Comment']], 'db page: comments matched, doc column order');
+eq(study_test_section($df, 'tiktok_favorite_videos')['title'] ?? null, 'Tiktok favorite videos', 'db page: undocumented section falls back');
+exec('rm -rf ' . escapeshellarg("$sc/config/flows"));
+
+// A database error on the page: logged, null (the page answers 404).
+$bw = new PDO('sqlite:' . $dbfile);
+$bw->exec('DROP TABLE watch_history');
+$bw->exec("CREATE VIEW watch_history AS SELECT abs(-9223372036854775808) AS participant_id, 1 AS donation_row, 'v' AS video_id, 'w' AS watched_at, 'r' AS watched_at_raw, 'l' AS link");
+$bw = null;
+study_reset();
+$prevLog = ini_set('error_log', $errlog);
+eq(study_participant('pa', 15, 1, false), null, 'db page error: null');
+check(str_contains((string)@file_get_contents($errlog), 'analysis database error (participant page)'), 'db page error: logged');
+ini_set('error_log', $prevLog === false ? '' : $prevLog);
+
 // Developer mode: no cache root -> computed, nothing cached.
 study_test_build_db($dbfile);
 $GLOBALS['__cfg'] = ['ddp_dir' => __DIR__ . '/fixtures/ddp', 'analysis_db' => $dbfile];

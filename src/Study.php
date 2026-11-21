@@ -139,6 +139,7 @@ function study_participants(): array {
  * @return ?array{id:string, platforms: array<string, array{title:string, notes: list<string>, scope: array<string, array{count:int, earliest:?int, latest:?int}>, sections: list<array{key:string, title:string, description:string, columns: list<string>, total:int, with_artifacts:int, hidden:int, deleted:int, sample: list<array{row: array<string,string>, links: list<array{label:string, url:string}>, reason:?string}>}>}>}
  */
 function study_participant(string $id, int $n, int $seed, bool $all): ?array {
+    if (study_mode() === 'database') { return study_db_participant($id, $n, $seed, $all); }
     return study_raw_participant($id, $n, $seed, $all);
 }
 
@@ -151,6 +152,25 @@ function study_participant(string $id, int $n, int $seed, bool $all): ?array {
 function study_transcript(string $vid): ?array {
     if (!preg_match('/^\d{19}$/D', $vid)) { return null; }
     return study_raw_transcript($vid);
+}
+
+/**
+ * Why a video has no transcript, in plain words, from video.availability
+ * (database mode only; both the participant and the transcript page use it).
+ * Null for `transcribed`; an unknown value is shown as-is with spaces.
+ */
+function study_availability_label(string $availability): ?string {
+    $labels = [
+        'removed_or_private' => 'removed or private',
+        'removed' => 'removed',
+        'region_gated' => 'not available in this region',
+        'login_gated' => 'needs a TikTok login',
+        'photo_no_audio' => 'photo post without audio',
+        'retries_exhausted' => 'could not be fetched',
+        'not_attempted' => 'not fetched (only liked, favorited or shared)',
+    ];
+    if ($availability === 'transcribed') { return null; }
+    return $labels[$availability] ?? str_replace('_', ' ', $availability);
 }
 
 function study_donation_count(): int {

@@ -98,3 +98,142 @@ function study_db_try_compute(PDO $db): ?array {
         return null;
     }
 }
+
+/** Per section: the donated row keys and the columns they come from (spec §5.3;
+ *  key names as real TikTok donations spell them). */
+function study_db_row_keys(): array {
+    return [
+        'watch' => ['Date' => 'watched_at_raw', 'Link' => 'link'],
+        'like' => ['Date' => 'liked_at_raw', 'Link' => 'link'],
+        'favorite' => ['Date' => 'favorited_at_raw', 'Link' => 'link'],
+        'share' => ['Date' => 'shared_at_raw', 'Link' => 'link', 'Method' => 'method', 'SharedContent' => 'content_type'],
+        'comment' => ['Comment' => 'comment', 'Date' => 'commented_at_raw'],
+    ];
+}
+
+/**
+ * The deterministic sample of one section as SQL over `$table h`: rows of
+ * participant :pid passing $filter, ordered by a (seed, section, donation_row)
+ * hash, first :n. Yields donation_row and the sort key k. Stage 1 is
+ * `(donation_row * 2654435761 + seed * 40503 + salt) % 2^32`; on its own a
+ * new seed only rotates that order (reshuffle would change ~1 row), so a fixed
+ * xorshift-multiply finalizer follows (XOR as (a|b)-(a&b); SQLite has no ^).
+ */
+function study_db_sample_sql(string $table, string $filter): string {
+    $q = "SELECT h.donation_row, ((h.donation_row * 2654435761 + :seed * 40503 + :salt) % 4294967296) AS k"
+        . " FROM $table h WHERE h.participant_id = :pid$filter";
+    foreach (['xs', 'mul', 'xs', 'mul', 'xs'] as $step) {
+        $e = $step === 'xs' ? '((k | (k >> 16)) - (k & (k >> 16)))' : '((k * 73244475) % 4294967296)';
+        $q = "SELECT donation_row, $e AS k FROM ($q)";
+    }
+    return "$q ORDER BY k, donation_row LIMIT :n";
+}
+
+/** The participant page from the database; null for a malformed or unknown id,
+ *  a participant who did not donate, or a database error (logged). */
+function study_db_participant(string $id, int $n, int $seed, bool $all): ?array {
+    if (!preg_match('/^[A-Za-z0-9_-]+$/D', $id)) { return null; }
+    $db = study_db();
+    if ($db === null) { return null; }
+    try {
+        return study_db_participant_compute($db, $id, $n, $seed, $all);
+    } catch (PDOException $e) {
+        error_log('DDP Inspector: analysis database error (participant page): ' . $e->getMessage());
+        return null;
+    }
+}
+
+function study_db_participant_compute(PDO $db, string $id, int $n, int $seed, bool $all): ?array {
+    $st = $db->prepare('SELECT * FROM participant WHERE participant_id = :pid');
+    $st->execute([':pid' => $id]);
+    $p = $st->fetch();
+    if ($p === false || $p['donation_status'] !== 'donated') { return null; }
+    $slug = 'tiktok';
+    $doc = flows_load_all()[$slug] ?? null;
+    $sections = study_db_sections();
+    $rowKeys = study_db_row_keys();
+
+    // flows_match() reads column names from rows: one key-only row per non-empty
+    // section (an empty one never matches, as in raw mode).
+    $present = []; $tables = [];
+    foreach ($sections as $s => [$key]) {
+        if ($p["n_$s"] === null) { continue; }
+        $present[$key] = $s;
+        $tables[$key] = (int)$p["n_$s"] > 0 ? [array_fill_keys(array_keys($rowKeys[$s]), '')] : [];
+    }
+    $match = flows_match($tables, $doc);
+    $order = flows_table_order($match);
+
+    $scope = []; $out = [];
+    foreach ($order as $key) {
+        $s = $present[$key];
+        [, $table, $col] = $sections[$s];
+        $total = (int)$p["n_$s"];
+        $r = $db->prepare("SELECT MIN($col) AS lo, MAX($col) AS hi FROM $table WHERE participant_id = :pid");
+        $r->execute([':pid' => $id]);
+        $range = $r->fetch() ?: ['lo' => null, 'hi' => null];
+        $scope[$key] = ['count' => $total,
+            'earliest' => $range['lo'] === null ? null : stats_parse_date_any((string)$range['lo']),
+            'latest' => $range['hi'] === null ? null : stats_parse_date_any((string)$range['hi'])];
+        if ($total === 0) { continue; }
+
+        $hasVideo = $s !== 'comment';
+        $filter = ($hasVideo && !$all) ? ' AND EXISTS (SELECT 1 FROM transcription t WHERE t.video_id = h.video_id)' : '';
+        if ($filter === '') {
+            $pool = $total;
+        } else {
+            $c = $db->prepare("SELECT COUNT(*) FROM $table h WHERE h.participant_id = :pid$filter");
+            $c->execute([':pid' => $id]);
+            $pool = (int)$c->fetchColumn();
+        }
+        $cols = implode(', ', array_map(fn($c) => "h.$c", array_values($rowKeys[$s])));
+        $sql = $hasVideo
+            ? "SELECT $cols, h.video_id, t.video_id AS transcribed, v.availability FROM (" . study_db_sample_sql($table, $filter) . ') s'
+              . " JOIN $table h ON h.participant_id = :pid AND h.donation_row = s.donation_row"
+              . ' LEFT JOIN transcription t ON t.video_id = h.video_id LEFT JOIN video v ON v.video_id = h.video_id'
+              . ' ORDER BY s.k, s.donation_row'
+            : "SELECT $cols FROM (" . study_db_sample_sql($table, '') . ') s'
+              . " JOIN $table h ON h.participant_id = :pid AND h.donation_row = s.donation_row ORDER BY s.k, s.donation_row";
+        $q = $db->prepare($sql);
+        $q->bindValue(':pid', $id);
+        $q->bindValue(':seed', $seed & 0xFFFFFFFF, PDO::PARAM_INT);
+        $q->bindValue(':salt', crc32($key), PDO::PARAM_INT);
+        $q->bindValue(':n', max(0, $n), PDO::PARAM_INT);
+        $q->execute();
+        $sample = [];
+        foreach ($q as $row) {
+            $cells = [];
+            foreach ($rowKeys[$s] as $k => $c) { $cells[$k] = $row[$c] === null ? '' : (string)$row[$c]; }
+            $links = []; $reason = null;
+            if ($hasVideo && $row['video_id'] !== null) {
+                if ($row['transcribed'] !== null) {
+                    $links[] = ['label' => analysis_modules()['transcripts']['label'], 'url' => url('transcript.php?vid=' . (string)$row['video_id'])];
+                } elseif ($row['availability'] !== null) {
+                    $reason = study_availability_label((string)$row['availability']);
+                }
+            }
+            $sample[] = ['row' => $cells, 'links' => $links, 'reason' => $reason];
+        }
+        $sec = ($match[$key] ?? null) !== null ? $doc['sections'][$match[$key]] : null;
+        $out[] = [
+            'key' => $key,
+            'title' => $sec !== null ? $sec['title'] : flows_prettify($key),
+            'description' => $sec !== null ? $sec['description'] : '',
+            'columns' => $sec !== null ? $sec['vars'] : array_keys($rowKeys[$s]),
+            'total' => $total,
+            'with_artifacts' => $pool,
+            'hidden' => max(0, $total - $pool),
+            'deleted' => (int)($p["deleted_$s"] ?? 0),
+            'sample' => $sample,
+        ];
+    }
+    $notes = [];
+    $files = (int)$p['donation_file_count'];
+    if ($files > 1) { $notes[] = "Note: this participant submitted $files files; the first one with data is shown."; }
+    return ['id' => (string)$p['participant_id'], 'platforms' => [$slug => [
+        'title' => $doc['platform_title'] ?? ucfirst($slug),
+        'notes' => $notes,
+        'scope' => $scope,
+        'sections' => $out,
+    ]]];
+}

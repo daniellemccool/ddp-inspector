@@ -135,6 +135,16 @@ $dbIndex = render_page('index.php', []);
 check(str_contains($dbIndex, '>pa<') || str_contains($dbIndex, 'pa</a>'), 'db index lists pa');
 check(str_contains($dbIndex, 'consented, did not donate'), 'db index labels the not-donated set-aside kind');
 check(str_contains($dbIndex, 'declined consent'), 'db index labels the declined-consent kind');
+$dbPage = render_page('participant.php', ['id' => 'pa', 'seed' => '1', 'n' => '15']);
+check(str_contains($dbPage, 'transcript.php?vid=7000000000000001001'), 'db participant page links the transcribed video');
+check(!str_contains($dbPage, 'removed or private'), 'db participant page hides untranscribed rows by default');
+$dbPageAll = render_page('participant.php', ['id' => 'pa', 'seed' => '1', 'n' => '15', 'all' => '1']);
+check(str_contains($dbPageAll, '<span class="reason">removed or private</span>'), 'db participant page renders a reason text');
+check(str_contains($dbPageAll, 'example.test/v/unresolved'), 'db participant page shows the NULL-video row');
+$dbPagePb = render_page('participant.php', ['id' => 'pb', 'seed' => '1', 'n' => '15']);
+check(str_contains($dbPagePb, 'submitted 2 files; the first one with data is shown'), 'db participant page shows the repeat-submission note');
+$dbMissing = render_page('participant.php', ['id' => 'nobody']);
+check(str_contains($dbMissing, 'not found') || str_contains($dbMissing, '404'), 'db participant page: unknown id -> not found');
 study_reset();
 exec('rm -rf ' . escapeshellarg($dbScratch));
 

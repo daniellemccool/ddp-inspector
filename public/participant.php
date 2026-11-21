@@ -84,7 +84,7 @@ $notice = study_db_notice();
               <?php endforeach; ?>
               <td class="actions"><?php foreach ($item['links'] as $link): ?>
                     <a href="<?= h($link['url']) ?>"><?= h($link['label']) ?></a>
-                  <?php endforeach; ?></td>
+                  <?php endforeach; ?><?php if ($item['reason'] !== null): ?><span class="reason"><?= h($item['reason']) ?></span><?php endif; ?></td>
             </tr>
           <?php endforeach; ?>
           </tbody>
