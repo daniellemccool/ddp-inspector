@@ -140,7 +140,29 @@ $cf2 = glob("$cdir/participants-*.json");
 eq(count($cf2), 1, 'db list: old cache files removed');
 check($cf2[0] !== $old, 'db list: a new cache file replaced the old one');
 
+// A database error while computing: empty shape, logged, nothing cached, index still renders.
+$GLOBALS['__cfg'] = ['storage_root' => $sc, 'default_n' => 15, 'base_path' => ''];
+study_test_build_db($dbfile);
+$bw = new PDO('sqlite:' . $dbfile);
+$bw->exec('DROP TABLE watch_history');
+$bw->exec("CREATE VIEW watch_history AS SELECT abs(-9223372036854775808) AS participant_id, 1 AS donation_row, 'v' AS video_id, 'w' AS watched_at, 'r' AS watched_at_raw, 'l' AS link");
+$bw = null;
+exec('rm -rf ' . escapeshellarg("$sc/cache"));
+study_reset();
+$errlog = "$sc/php-errors.log";
+$prevLog = ini_set('error_log', $errlog);
+eq(study_mode(), 'database', 'db error: the shape check still passes');
+eq(study_participants(), ['participants' => [], 'skipped' => []], 'db error: empty shape');
+eq(glob("$sc/cache/study/participants-*.json") ?: [], [], 'db error: nothing cached');
+eq(study_donation_count(), 3, 'db error: unrelated donation count still works');
+check(str_contains((string)@file_get_contents($errlog), 'analysis database error (participant list)'), 'db error: logged');
+$_GET = []; $_SERVER['REQUEST_METHOD'] = 'GET';
+ob_start(); include __DIR__ . '/../public/index.php'; $errIndex = ob_get_clean();
+check($errIndex !== '' && !str_contains($errIndex, 'Fatal error'), 'db error: index.php still renders');
+ini_set('error_log', $prevLog === false ? '' : $prevLog);
+
 // Developer mode: no cache root -> computed, nothing cached.
+study_test_build_db($dbfile);
 $GLOBALS['__cfg'] = ['ddp_dir' => __DIR__ . '/fixtures/ddp', 'analysis_db' => $dbfile];
 study_reset();
 eq(study_mode(), 'database', 'db list: developer-mode database');

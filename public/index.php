@@ -69,7 +69,7 @@ if ($storageMode) { csrf_token(); }
   <?php endif; ?>
   <?php if ($loaded['skipped']): ?>
     <details class="skipped">
-      <summary>⚠ <?= count($loaded['skipped']) ?> file(s) set aside — <?= h(implode(', ', $skipBits)) ?></summary>
+      <summary>⚠ <?= count($loaded['skipped']) ?> <?= study_mode() === 'database' ? '' : 'file(s) ' ?>set aside — <?= h(implode(', ', $skipBits)) ?></summary>
       <ul>
       <?php foreach ($loaded['skipped'] as $s): ?>
         <li><?= h($s['participant']) ?> — <?= h(match ($s['kind']) { 'declined' => 'declined to donate', 'empty' => 'empty upload', 'not_donated' => 'consented, did not donate', 'declined_consent' => 'declined consent', default => 'unreadable file' }) ?>

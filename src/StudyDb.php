@@ -15,7 +15,12 @@ function study_db_sections(): array {
 }
 
 function study_db_donation_count(PDO $db): int {
-    return (int)$db->query("SELECT COUNT(*) FROM participant WHERE donation_status = 'donated'")->fetchColumn();
+    try {
+        return (int)$db->query("SELECT COUNT(*) FROM participant WHERE donation_status = 'donated'")->fetchColumn();
+    } catch (PDOException $e) {
+        error_log('DDP Inspector: analysis database error (donation count): ' . $e->getMessage());
+        return 0;
+    }
 }
 
 /** Compute the participant list: one query per measure, never per participant. */
@@ -69,15 +74,27 @@ function study_db_participants(): array {
     $file = study_db_file();
     $cache = inst_paths()['cache'];
     if ($db === null || $file === null) { return ['participants' => [], 'skipped' => []]; }
-    if ($cache === null) { return study_db_participants_compute($db); }
+    $empty = ['participants' => [], 'skipped' => []];
+    if ($cache === null) { return study_db_try_compute($db) ?? $empty; }
     clearstatcache(true, $file);
     $dir = $cache . '/study';
     $path = $dir . '/participants-' . filesize($file) . '-' . filemtime($file) . '.json';
     $hit = inst_read_json($path);
     if (is_array($hit) && isset($hit['participants'], $hit['skipped'])) { return $hit; }
-    $out = study_db_participants_compute($db);
+    $out = study_db_try_compute($db);
+    if ($out === null) { return $empty; } // a failed run is never cached
     if (inst_write_json_atomic($path, $out)) {
         foreach (glob($dir . '/participants-*.json') ?: [] as $f) { if ($f !== $path) { @unlink($f); } }
     }
     return $out;
+}
+
+/** The computed list, or null (logged) when the database errors: locked, corrupt, or a shape the check missed. */
+function study_db_try_compute(PDO $db): ?array {
+    try {
+        return study_db_participants_compute($db);
+    } catch (PDOException $e) {
+        error_log('DDP Inspector: analysis database error (participant list): ' . $e->getMessage());
+        return null;
+    }
 }
