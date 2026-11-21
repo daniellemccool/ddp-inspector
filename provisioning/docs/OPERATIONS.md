@@ -96,6 +96,22 @@ mint new, paste new, `rmticket` old. The workspace never holds a Yoda
 account, DAP, or CO membership (anonymous ticket access, verified
 2026-07-13).
 
+The collection path is the FULL iRODS path, zone and home included
+(`/nluu10p/home/research-tiktok-crime-policing`): the anonymous ticket
+environment has no `irods_home` to resolve a relative path against.
+What the refresh reads under it:
+
+    inbox/*.json                     loose donation files (original layout), or
+    donations/<YYYYMMDD>_<study>.zip Next exports; the newest zip wins and the
+                                     inbox mirrors its *_source=*.json files
+                                     (no onboarding, no participant=preview)
+    transcripts/                     optional, extracted transcript tree, or
+    transcripts-tars/shard-*.tar     optional, pulled whole then unpacked
+
+`inbox/` is preferred when both exist. Size the volume for the transcript
+tars: the crime study's 100 shards are 30.7 GiB, all pulled before
+unpacking.
+
 ## 5. Research Drive share links
 
 Researcher-self-serve in the RD web portal: share the donations folder by
