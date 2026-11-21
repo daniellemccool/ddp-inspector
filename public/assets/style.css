@@ -49,11 +49,74 @@ body { margin:0; min-height:100vh; background:var(--surface); color:var(--text);
 .site-nav__item.is-active a::before { transform:scaleX(1); }
 .site-nav__item.is-active a { color:var(--heading); }
 
-.wrap { max-width:var(--site-width); margin:0 auto; padding:var(--space-32) var(--edge) var(--space-96); }
+/* --- the title band: the front page's band, in small ------------------------
+   A sky band under the header holds the page's title on a white line between
+   two nodes. Right of the title the line carries the phone, drops past the
+   step to the consent badge and ends at the globe. The lower edge is the blue
+   line with its step, the coral node in the step and a blue node on the deep
+   side. What a page marks .niche sits in the white niche under the shallow
+   side. Everything is measured from the right edge, so it holds at any width. */
+:root { --tb-depth:84px; --tb-drop:44px; --tb-step:44px; --tb-deep:clamp(280px, 34vw, 640px); }
+.band { position:relative; background:var(--sky); overflow-x:clip; }
+/* Three columns, as the page below: the left margin, the content column, the right margin. */
+.band__row { display:grid; min-height:var(--tb-depth);
+             grid-template-columns:minmax(var(--edge), 1fr) minmax(0, calc(var(--site-width) - 2 * var(--edge))) minmax(var(--edge), 1fr); }
+.band__lead { grid-column:1; position:relative; margin-right:12px; }
+.band__main { grid-column:2 / 4; display:flex; align-items:center; min-width:0; }
+.band__lead::before, .band__line { content:""; position:absolute; height:var(--line-band); background:var(--on-sky); }
+.band__lead::before { left:0; right:0; top:50%; }
+.band__lead::after, .band__thread::before { content:""; position:absolute; top:calc(50% - var(--node) / 2 + .5px);
+                                            width:var(--node); height:var(--node);
+                                            border-radius:var(--radius-circle); background:var(--on-sky); }
+.band__lead::after { right:calc(var(--node) / -2); }
+.band h1 { flex:0 1 auto; min-width:0; margin:0 12px 0 0; padding:var(--space-16) 0; color:var(--on-sky); }
+/* An id is too small for white on sky: it takes the band's blue, set bold,
+   as the front page's subtitle does, and its small label is dark ink. The label floats
+   above, so the line runs through the id. */
+.band h1:has(.id) { position:relative; padding:0; }
+.band h1 .eyebrow { position:absolute; left:0; bottom:calc(100% + 5px); margin:0; white-space:nowrap; color:var(--heading); }
+.band h1 .id { color:var(--blue); font-weight:700; }
+.band__thread { flex:1; align-self:stretch; position:relative; min-width:0; }
+.band__thread::before { left:calc(var(--node) / -2); }
+.band__line--title { left:0; right:calc(var(--tb-deep) - 40px); top:50%; }
+.band__drop { position:absolute; right:calc(var(--tb-deep) - 96px); top:50%; width:56px; height:calc(50% + 8px);
+              overflow:visible; fill:none; stroke:var(--on-sky); stroke-width:var(--line-band); }
+.band__line--deep { right:0; width:calc(var(--tb-deep) - 96px); top:calc(100% + 8px); }
+.band__piece { position:absolute; transform:translate(50%, -50%); }
+.band__piece--phone { right:calc(var(--tb-deep) + 120px); top:calc(50% + .5px); }
+.band__piece--badge { right:calc(var(--tb-deep) * .55); top:calc(100% + 8.5px); }
+.band__piece--globe { right:calc(var(--page-edge) - var(--gutter) + var(--edge) + 20px); top:calc(100% + 8.5px); }
+.band__deep { position:absolute; right:0; top:calc(100% - 1px); width:calc(var(--tb-deep) + 1px);
+              height:calc(var(--tb-drop) + 1px); background:var(--sky); }
+.band__deep::after { content:""; position:absolute; left:32%; bottom:calc(var(--node-edge) / -2); width:var(--node-edge);
+                     height:var(--node-edge); border-radius:var(--radius-circle); background:var(--blue); }
+.band__step { position:absolute; right:var(--tb-deep); top:100%; width:var(--tb-step); height:var(--tb-drop); }
+.band__step svg { display:block; width:100%; height:100%; overflow:visible; }
+.band__step-sky { fill:var(--sky); }
+.band__edge { fill:none; stroke:var(--blue); stroke-width:var(--line-page); }
+.band__step::after { content:""; position:absolute; left:calc(50% - var(--node-edge) / 2); top:calc(50% - var(--node-edge) / 2);
+                     width:var(--node-edge); height:var(--node-edge); border-radius:var(--radius-circle);
+                     background:var(--coral); }
+@media (max-width:899px) { .band__piece--phone { display:none; } }
+@media (max-width:767px) { .band__thread > *, .band__thread::before, .band__lead::before, .band__lead::after { display:none; } }
+@media (max-width:599px) { :root { --tb-depth:72px; --tb-drop:28px; --tb-step:28px; --tb-deep:38vw; } }
+
+/* The page's own content starts clear of the band's deep side. */
+.wrap { max-width:var(--site-width); margin:0 auto;
+        padding:calc(var(--tb-drop) + var(--space-24)) var(--edge) var(--space-96); }
+/* From 1100px the niche is wide enough for a page's first row of controls. */
+@media (min-width:1100px) {
+  .niche:first-child { display:flex; flex-wrap:nowrap; align-items:center; justify-content:flex-start;
+                       gap:0 var(--space-24); height:var(--tb-drop);
+                       max-width:calc(100vw - var(--tb-deep) - var(--tb-step) - var(--space-16) - var(--page-edge));
+                       margin:calc(-1 * (var(--tb-drop) + var(--space-24))) 0 var(--space-24);
+                       border:0; white-space:nowrap; }
+  .niche:first-child > * { margin:0; }
+}
 
 /* --- type ---------------------------------------------------------------- */
 h1, h2, h3 { color:var(--heading); letter-spacing:0; overflow-wrap:break-word; }
-h1 { margin:0 0 var(--space-24); font:420 2rem/1.08 var(--font-serif); }
+h1 { margin:0; font:420 2rem/1.08 var(--font-serif); }
 @media (min-width:768px) { h1 { font-size:2.4rem; } }
 h2 { margin:var(--space-48) 0 var(--space-8); font:420 1.6875rem/1.2 var(--font-serif); }
 h3 { margin:var(--space-32) 0 var(--space-4); font:700 1.0625rem/1.3 var(--font-sans); }
@@ -194,7 +257,7 @@ input[type=radio], input[type=checkbox] { flex:none; width:16px; height:16px; ma
 }
 
 /* --- setup: the steps hang on one line, numbered in discs --------------- */
-.steps { position:relative; margin-top:var(--space-32); }
+.steps { position:relative; }
 .steps::before { content:""; position:absolute; left:calc(24px - .75px); top:24px; bottom:0;
                  width:var(--line-page); background:var(--blue); }
 .steps::after { content:""; position:absolute; left:calc(24px - var(--node-ring) / 2);
@@ -257,6 +320,9 @@ td.low::before { content:""; display:inline-block; width:var(--node); height:var
 
 /* --- print: it's a reading tool ---------------------------------------- */
 @media print {
-  .site-header, .skip-link, form, .controls, .reshuffle, details, button, .more__dots, .go { display:none !important; }
+  .site-header, .skip-link, form, .controls, .reshuffle, details, button, .more__dots, .go,
+  .band__lead, .band__thread, .band__deep, .band__step { display:none !important; }
+  .band { background:none; }
+  .band h1 { margin:0 var(--edge); color:var(--heading); }
   .wrap { padding-top:0; }
 }

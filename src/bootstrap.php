@@ -25,12 +25,14 @@ function asset_url(string $rel): string {
 }
 
 /**
- * The document head and the site header every page shares, up to and
- * including the opening <main>. $section is the nav link to mark current:
- * 'participants' or 'settings'. The header follows datadonation.eu's: the
- * name over a subtitle (here the study's name), the links on the right.
+ * The document head, the site header and the title band every page shares,
+ * up to the start of the page's own content. $section is the nav link to
+ * mark current: 'participants' or 'settings'. $heading is the page's <h1>
+ * content, as HTML that is already escaped. The header follows
+ * datadonation.eu's: the name over a subtitle (here the study's name), the
+ * links on the right. Close the page with page_bottom().
  */
-function page_top(string $title, string $section): void {
+function page_top(string $title, string $section, string $heading): void {
     $storage = inst_root() !== null;
     $study = $storage ? trim((string)(inst_load()['study_name'] ?? '')) : '';
     $links = ['participants' => ['index.php', 'Participants']];
@@ -59,8 +61,41 @@ function page_top(string $title, string $section): void {
     </nav>
   </div>
 </header>
-<main class="wrap" id="main">
+<main id="main">
+<?php // The front page's band in small: the title on a line between two nodes,
+      // a few of its pieces on that line, and the stepped lower edge. All of the
+      // drawing is decoration. Whatever a page marks .niche sits in the white
+      // niche under the band's shallow side, where the front page puts its note. ?>
+<div class="band">
+  <i class="band__deep" aria-hidden="true"></i>
+  <div class="band__row">
+    <i class="band__lead" aria-hidden="true"></i>
+    <div class="band__main">
+    <h1><?= $heading ?></h1>
+    <div class="band__thread" aria-hidden="true">
+      <i class="band__line band__line--title"></i>
+      <svg class="band__drop" viewBox="0 0 100 100" preserveAspectRatio="none"><path d="M0 0 C50 0 50 100 100 100" vector-effect="non-scaling-stroke"/></svg>
+      <i class="band__line band__line--deep"></i>
+      <img class="band__piece band__piece--phone" src="<?= h(asset_url('assets/network/phone.svg')) ?>" alt="" width="36" height="36">
+      <img class="band__piece band__piece--badge" src="<?= h(asset_url('assets/network/consent-badge.svg')) ?>" alt="" width="52" height="52">
+      <img class="band__piece band__piece--globe" src="<?= h(asset_url('assets/network/globe.svg')) ?>" alt="" width="40" height="40">
+    </div>
+    </div>
+  </div>
+  <div class="band__step" aria-hidden="true">
+    <svg viewBox="0 0 100 100" preserveAspectRatio="none">
+      <path class="band__step-sky" d="M0 -2 H102 V100 H100 C50 100 50 0 0 0 Z"/>
+      <path class="band__edge" d="M-100000 0 H0 C50 0 50 100 100 100 H100000" vector-effect="non-scaling-stroke"/>
+    </svg>
+  </div>
+</div>
+<div class="wrap">
 <?php
+}
+
+/** Closes what page_top() opened. */
+function page_bottom(): void {
+    echo "</div>\n</main>\n";
 }
 
 /**

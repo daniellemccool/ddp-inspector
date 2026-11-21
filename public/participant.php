@@ -18,21 +18,20 @@ if ($notice === null && $participant === null) {
 }
 $id = $participant['id'] ?? $id;
 ?>
-<?php page_top($id, 'participants'); ?>
-  <h1><span class="eyebrow">Participant</span> <span class="id"><?= h($id) ?></span></h1>
+<?php page_top($id, 'participants', '<span class="eyebrow">Participant</span> <span class="id">' . h($id) . '</span>'); ?>
   <?php if ($notice !== null): ?><p class="notice"><?= h($notice) ?></p><?php else: ?>
-  <div class="controls">
+  <div class="controls niche">
   <p class="samplesize"><span class="samplesize__label">Rows per table</span>
     <?php foreach ([10, 15, 20, 50] as $opt): ?>
       <a href="<?= h(url('participant.php?id=' . rawurlencode($id) . '&n=' . $opt . '&seed=' . $seed . ($showAllRows ? '&all=1' : ''))) ?>"<?= $opt === $n ? ' class="cur" aria-current="true"' : '' ?>><?= $opt ?></a>
     <?php endforeach; ?>
   </p>
   <p class="meta"><?php if (!$showAllRows): ?>
-    Rows whose video has no transcript yet are hidden —
-    <a href="<?= h(url('participant.php?id=' . rawurlencode($id) . '&n=' . $n . '&seed=' . $seed . '&all=1')) ?>">include them</a>
+    Rows without a transcript are hidden —
+    <a href="<?= h(url('participant.php?id=' . rawurlencode($id) . '&n=' . $n . '&seed=' . $seed . '&all=1')) ?>">show them</a>
   <?php else: ?>
-    Showing all rows, including untranscribed videos —
-    <a href="<?= h(url('participant.php?id=' . rawurlencode($id) . '&n=' . $n . '&seed=' . $seed)) ?>">hide untranscribed</a>
+    All rows are shown —
+    <a href="<?= h(url('participant.php?id=' . rawurlencode($id) . '&n=' . $n . '&seed=' . $seed)) ?>">hide rows without a transcript</a>
   <?php endif; ?></p>
   </div>
 
@@ -88,4 +87,4 @@ $id = $participant['id'] ?? $id;
     <?php endforeach; ?>
   <?php endforeach; ?>
   <?php endif; ?>
-</main>
+<?php page_bottom(); ?>
