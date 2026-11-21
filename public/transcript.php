@@ -41,8 +41,7 @@ $seg_info = function (array $seg): array {
 };
 
 ?>
-<?php page_top('video ' . $vid, 'participants'); ?>
-  <h1><span class="eyebrow">Video</span> <span class="id"><?= h($vid) ?></span></h1>
+<?php page_top('video ' . $vid, 'participants', '<span class="eyebrow">Video</span> <span class="id">' . h($vid) . '</span>'); ?>
   <?php if ($notice !== null): ?>
     <p class="notice"><?= h($notice) ?></p>
   <?php elseif ($txt === null && $meta === null): ?>
@@ -135,4 +134,4 @@ $seg_info = function (array $seg): array {
     </div>
     </div>
   <?php endif; ?>
-</main>
+<?php page_bottom(); ?>

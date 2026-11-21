@@ -38,11 +38,9 @@ if ($skipKinds['declined_consent']) { $skipBits[] = $skipKinds['declined_consent
 // once headers are sent — see Task 10 carry-forward constraint).
 if ($storageMode) { csrf_token(); }
 ?>
-<?php page_top('participants', 'participants'); ?>
-  <h1>Participants</h1>
-  <?php if ($notice !== null): ?><p class="notice"><?= h($notice) ?></p><?php endif; ?>
+<?php page_top('participants', 'participants', 'Participants'); ?>
   <?php if ($storageMode): ?>
-    <div class="toolbar">
+    <div class="toolbar niche">
       <p class="meta"><?php
         // Database mode counts participants who donated; raw mode counts files.
         // No count while the notice applies: there is nothing to count yet.
@@ -55,9 +53,12 @@ if ($storageMode) { csrf_token(); }
         <button>Check for new donations<?= go_mark() ?></button>
       </form>
     </div>
+    <?php if ($notice !== null): ?><p class="notice"><?= h($notice) ?></p><?php endif; ?>
     <?php if ($status['phase'] === 'error'): ?>
       <p class="warn"><?= h((string)$status['message']) ?></p>
     <?php endif; ?>
+  <?php elseif ($notice !== null): ?>
+    <p class="notice"><?= h($notice) ?></p>
   <?php endif; ?>
   <?php if ($notice === null): ?>
   <?php if ($loaded['skipped']): ?>
@@ -110,4 +111,4 @@ if ($storageMode) { csrf_token(); }
   </table>
   <?php endif; ?>
   <?php endif; ?>
-</main>
+<?php page_bottom(); ?>

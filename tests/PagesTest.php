@@ -30,6 +30,10 @@ check(preg_match('~assets/tokens\.css\?v=\d+">\s*<link rel="stylesheet" href="as
 check(str_contains($html, '<li class="site-nav__item is-active"><a href="index.php" aria-current="true">Participants</a></li>'),
       'header marks Participants as the current section');
 check(!str_contains($html, 'setup.php'), 'dev-mode header has no Settings link');
+// The title band: the page's one <h1> sits in it, before the page's own content.
+check(preg_match('~<div class="band">.*<h1>Participants</h1>.*</div>\s*<div class="wrap">~s', $html) === 1
+      && substr_count($html, '<h1') === 1, 'the page title is in the band, once');
+check(str_ends_with(rtrim($html), "</div>\n</main>"), 'page_bottom closes the page');
 
 // --- participant.php ---
 $html = render_page('participant.php', ['id' => 'p1', 'seed' => '1', 'n' => '1']);
@@ -120,6 +124,8 @@ check(str_contains($storageIndex, '3 donation file(s)'), 'storage-mode index sho
 check(str_contains($storageIndex, '<form method="post" action="setup.php">'), 'storage-mode index has the refresh-donations form');
 check(str_contains($storageIndex, 'name="csrf"'), 'storage-mode refresh form carries a csrf field');
 check(str_contains($storageIndex, 'Check for new donations'), 'storage-mode index shows the refresh button');
+check(preg_match('~<div class="wrap">\s*<div class="toolbar niche">~', $storageIndex) === 1,
+      'the refresh row is the first thing after the band, so it sits in the niche');
 check(str_contains($storageIndex, '<span class="site-header__subtitle">Storage-mode pages test</span>'),
       'storage-mode header shows the study name under the product name');
 check(str_contains($storageIndex, '<li class="site-nav__item"><a href="setup.php">Settings</a></li>'),

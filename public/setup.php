@@ -14,8 +14,7 @@ $status = inst_status();
 // once headers are sent — see Task 10 carry-forward constraint).
 if ($storageMode) { csrf_token(); }
 ?>
-<?php page_top('set up', 'settings'); ?>
-  <h1>Set up this inspector</h1>
+<?php page_top('set up', 'settings', 'Set up this inspector'); ?>
   <?php foreach ($flash as $f): ?>
     <p class="<?= $f['kind'] === 'ok' ? 'notice' : 'warn' ?>"><?= h($f['text']) ?></p>
   <?php endforeach; ?>
@@ -118,4 +117,4 @@ if ($storageMode) { csrf_token(); }
   </section>
   </div>
   <?php endif; ?>
-</main>
+<?php page_bottom(); ?>
