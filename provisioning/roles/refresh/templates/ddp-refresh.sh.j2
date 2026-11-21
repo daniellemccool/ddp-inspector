@@ -115,6 +115,44 @@ link_inbox_to() { # link_inbox_to <folder>: local mode, the inbox IS that folder
 db_missing() {
   die "The analysis database was not found at ${DBPATH} in the study folder. Check the path in Settings."
 }
+db_unreachable() { # the listing failed for another reason than "not found"
+  die "Could not reach the data store to check the analysis database. This is usually temporary — try again in a few minutes."
+}
+human_size() { # human_size <bytes>: "33 GB" (numfmt, when installed), else "<bytes> bytes"
+  local h
+  h="$(numfmt --to=iec "$1" 2>/dev/null)" || h=""
+  case "${h}" in
+    *[KMGTPEZY]) printf '%s %sB' "${h%?}" "${h: -1}" ;;
+    *) printf '%s bytes' "$1" ;;
+  esac
+}
+db_listing_size() { # db_listing_size <listing> <separators>: the size of the one file listed
+  # The listing names the declared file only when every line ends in its
+  # name, after one of <separators> (gocmd prints a line per replica). A
+  # folder path lists the folder's contents instead, and fetching it would
+  # pull the whole folder: fail then, as for an empty listing. The size is
+  # the number just before the date (rclone lsl, ils-style lines), else the
+  # first number on the line; empty when there is none.
+  local name line size="" first="" prev="" f n=0
+  local -a fields
+  name="$(basename "${DBPATH}")"
+  while IFS= read -r line; do
+    line="${line%"${line##*[![:space:]]}"}"   # drop trailing blanks
+    [ -n "${line}" ] || continue
+    # shellcheck disable=SC2254 # $2 is a bracket-expression body on purpose
+    case "${line}" in *[$2]"${name}") ;; *) return 1 ;; esac
+    n=$((n + 1))
+    [ "${n}" -eq 1 ] || continue
+    read -ra fields <<<"${line%"${name}"}"
+    for f in "${fields[@]}"; do
+      if [[ "${f}" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2} && "${prev}" =~ ^[0-9]+$ ]]; then size="${prev}"; break; fi
+      [[ -z "${first}" && "${f}" =~ ^[0-9]+$ ]] && first="${f}"
+      prev="${f}"
+    done
+  done <<<"$1"
+  [ "${n}" -gt 0 ] || return 1
+  printf '%s' "${size:-${first}}"
+}
 fetch_db() { # fetch_db <source> <listing> <download function>: yoda/rd-link database mode
   # Download only when the remote listing (size + modification time, as the
   # remote prints it) differs from the one stored at the last fetch, or the
@@ -122,7 +160,8 @@ fetch_db() { # fetch_db <source> <listing> <download function>: yoda/rd-link dat
   # goes to a staging dir on the same filesystem and is renamed into place,
   # so the pages never see a partial file: a page open mid-swap keeps
   # reading the old inode. The listing is stored only after the swap.
-  local listing="$2" get="$3" stored got
+  # DBSIZE (from db_listing_size) sizes the room check and the message.
+  local listing="$2" get="$3" stored got avail hs=""
   stored="$(printf '%s %s\n%s' "$1" "${DBPATH}" "${listing}")"
   rm -rf "${DBSTAGE}"
   mkdir -p "$(dirname "${DB}")"
@@ -133,7 +172,16 @@ fetch_db() { # fetch_db <source> <listing> <download function>: yoda/rd-link dat
     echo "[refresh] analysis database up to date"
     return
   fi
-  write_status pulling - - "Fetching the analysis database…"
+  if [ -n "${DBSIZE}" ]; then
+    hs=" ($(human_size "${DBSIZE}"))"
+    # The staging copy needs the full size; the old file stays until the swap.
+    avail="$(df -Pk "$(dirname "${DB}")" 2>/dev/null | awk 'NR == 2 { print $4 }')"
+    if [[ "${avail}" =~ ^[0-9]+$ ]] && [ "$((avail * 1024))" -lt "${DBSIZE}" ]; then
+      die "There isn't enough room on the storage volume for the analysis database (needs about $(human_size "${DBSIZE}"))."
+    fi
+  fi
+  write_status pulling - - "Fetching the analysis database${hs}…"
+  echo "[refresh] fetching the analysis database${hs}"
   mkdir -p "${DBSTAGE}"
   "${get}" || die "Fetching the analysis database stopped partway. This is usually temporary — try again in a few minutes."
   got="${DBSTAGE}/$(basename "${DBPATH}")"
@@ -163,6 +211,7 @@ MODE="$(jq -r '.source_mode // ""' "${INSTANCE}")"
 # to the study folder (validated at save: relative, no ..); empty = not declared.
 DBPATH="$(jq -r '.analyses.database | select(.enabled) | .path // empty' "${INSTANCE}" 2>/dev/null)"
 DBNOTE=""
+DBSIZE=""
 echo "[refresh] $(date -u +%FT%TZ) mode=${MODE} requested=${REQUESTED} cadence=${CADENCE}"
 
 case "${MODE}" in
@@ -200,7 +249,13 @@ case "${MODE}" in
       # Database mode: only the database file; no donations, no transcripts.
       # Change detection compares the listing ourselves (not get --diff).
       DBSRC="i:${COLLECTION}/${DBPATH}"
-      LISTING="$(gc ls -l "${DBSRC}")" && [ -n "${LISTING}" ] || db_missing
+      if ! LISTING="$(gc ls -l "${DBSRC}" 2>"${GDIR}/ls.err")"; then
+        cat "${GDIR}/ls.err"
+        grep -Eqi 'not found|not exist|no such|CAT_NO_ROWS_FOUND|-808000' "${GDIR}/ls.err" && db_missing
+        db_unreachable
+      fi
+      # A full iRODS path may precede the name: "/" counts as a separator.
+      DBSIZE="$(db_listing_size "${LISTING}" '[:space:]/')" || db_missing
       get_db_yoda() { gc get -f "${DBSRC}" "${DBSTAGE}"; }
       fetch_db "yoda ${COLLECTION}" "${LISTING}" get_db_yoda
     else
@@ -269,7 +324,11 @@ case "${MODE}" in
       || die "Could not open the Research Drive share link. The link may have expired or the password may be wrong — create a new share link, paste it in Setup, and try again."
     if [ -n "${DBPATH}" ]; then
       # Database mode: only that file. lsl prints "<size> <date> <time> <name>".
-      LISTING="$("${RCLONE}" lsl ":webdav:${DBPATH}" "${RFLAGS[@]}")" && [ -n "${LISTING}" ] || db_missing
+      # rclone exit codes 3 and 4: directory / file not found.
+      LISTING="$("${RCLONE}" lsl ":webdav:${DBPATH}" "${RFLAGS[@]}")"
+      case "$?" in 0) ;; 3|4) db_missing ;; *) db_unreachable ;; esac
+      # lsl lists a folder recursively as sub/path: only whitespace separates the name.
+      DBSIZE="$(db_listing_size "${LISTING}" '[:space:]')" || db_missing
       get_db_rd() { "${RCLONE}" copy ":webdav:${DBPATH}" "${DBSTAGE}" "${RFLAGS[@]}"; }
       fetch_db "rd-link" "${LISTING}" get_db_rd
     else

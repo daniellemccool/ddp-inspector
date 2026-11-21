@@ -32,6 +32,9 @@ export FAKE_RD="${TMP}/rd"; mkdir -p "${FAKE_RD}"
 # FAKE_GOCMD_FAIL=1 = the server rejects the login (expired/revoked DAP).
 # ls -l prints "<size> <mtime-epoch> <name>" per data object (from stat).
 # FAKE_GOCMD_GET_FAIL=1 = a get copies the data, then fails (stopped partway).
+# FAKE_GOCMD_LS_FORMAT=ils = ls -l prints an ils-style line instead
+# ("  <replica> <owner> <resource> <size> <date.time> & <name>", tab-separated).
+# FAKE_GOCMD_LSL_FAIL=1 = ls -l cannot reach the server (plain ls still works).
 export FAKE_YODA_PASSWORD="dap-secret"
 export FAKE_GOCMD_ENV_COPY="${TMP}/gocmd-env-copy.json"
 mkdir -p "${TMP}/bin"
@@ -53,9 +56,16 @@ while [ $# -gt 0 ]; do
     *)  if [ -z "${cmd}" ]; then cmd="$1"; else args+=("$1"); fi; shift ;;
   esac
 done
-lsl() { echo "$(stat -c '%s %Y' "$1") $(basename "$1")"; }
+lsl() {
+  if [ "${FAKE_GOCMD_LS_FORMAT:-}" = ils ]; then
+    printf '  0\tr@uu.nl\tdemoResc\t%s\t%s\t&\t%s\n' "$(stat -c %s "$1")" "$(date -u -r "$1" '+%F.%H:%M')" "$(basename "$1")"
+  else echo "$(stat -c '%s %Y' "$1") $(basename "$1")"; fi
+}
 case "${cmd}" in
-  ls)   p="$(resolve "${args[0]}")"; [ -e "${p}" ] || { echo "not found" >&2; exit 1; }
+  ls)   if [ "${long}" = 1 ] && [ "${FAKE_GOCMD_LSL_FAIL:-0}" = 1 ]; then
+          echo "failed to establish a connection to the iRODS server" >&2; exit 1
+        fi
+        p="$(resolve "${args[0]}")"; [ -e "${p}" ] || { echo "not found" >&2; exit 1; }
         if [ "${long}" = 0 ]; then ls "${p}"
         elif [ -d "${p}" ]; then for e in "${p}"/*; do [ -f "${e}" ] && lsl "${e}"; done; exit 0
         else lsl "${p}"; fi ;;
@@ -74,7 +84,7 @@ chmod +x "${TMP}/bin/gocmd"
 # --include honoured); lsl lists a file (or a folder's files) as
 # "<size> <date> <time> <name>"; copy copies a file or folder into a local
 # dir; sync mirrors the source folder's top-level files matching --include
-# into dest.
+# into dest. FAKE_RCLONE_LSL_FAIL=1 = lsl cannot reach the server.
 cat > "${TMP}/bin/rclone" <<'FAKE'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -105,7 +115,8 @@ case "${cmd}" in
              if [ -d "${e}" ]; then [ "${files_only}" = 1 ] || echo "${n}/"
              else [[ "${n}" == ${inc} ]] && echo "${n}"; fi
            done; exit 0 ;;
-  lsl)     p="$(resolve "${pos[0]}")"
+  lsl)     [ "${FAKE_RCLONE_LSL_FAIL:-0}" = 1 ] && { echo "connection reset by peer" >&2; exit 1; }
+           p="$(resolve "${pos[0]}")"
            row() { printf '%9d %s %s\n' "$(stat -c %s "$1")" "$(date -r "$1" '+%F %T.%N')" "$(basename "$1")"; }
            if [ -f "${p}" ]; then row "${p}"
            elif [ -d "${p}" ]; then for e in "${p}"/*; do [ -f "${e}" ] && row "${e}"; done
@@ -121,6 +132,17 @@ case "${cmd}" in
 esac
 FAKE
 chmod +x "${TMP}/bin/rclone"
+
+# fake df: FAKE_DF_AVAIL_KB = the free space to report (1K blocks, POSIX
+# format); unset = the real df.
+REAL_DF="$(command -v df)"
+cat > "${TMP}/bin/df" <<FAKE
+#!/usr/bin/env bash
+[ -n "\${FAKE_DF_AVAIL_KB:-}" ] || exec "${REAL_DF}" "\$@"
+echo "Filesystem 1024-blocks Used Available Capacity Mounted on"
+echo "fakefs 1000000000 0 \${FAKE_DF_AVAIL_KB} 0% /"
+FAKE
+chmod +x "${TMP}/bin/df"
 
 # fake php: records the call and prints FAKE_PHP_COUNT as the count; unset or
 # FAKE_PHP_FAIL=1 = the warm-up fails (the other tests rely on the file-count fallback).
@@ -555,6 +577,44 @@ check "db yoda missing: phase error"         status_is .phase error
 check "db yoda missing: names the path"      message_has "The analysis database was not found at analysis/missing.sqlite in the study folder. Check the path in Settings."
 check "db yoda missing: database kept"       grep -qx database-v3 "${ADB}"
 
+# 10f2. the path names a folder: refused before any download (fetching it
+# would pull the whole folder)
+db_cfg yoda analysis
+: > "${FAKE_GOCMD_LOG}"
+touch "${ROOT}/state/refresh-requested"; "${TMP}/ddp-refresh.sh" || true
+check "db yoda folder: phase error"          status_is .phase error
+check "db yoda folder: says not found"       message_has "The analysis database was not found at analysis in the study folder."
+check "db yoda folder: nothing fetched"      bash -c "! grep -q ' get ' '${FAKE_GOCMD_LOG}'"
+check "db yoda folder: database kept"        grep -qx database-v3 "${ADB}"
+check "db yoda folder: no staging left"      no_db_staging
+
+# 10f3. the listing fails for another reason (network): not reported as "not found"
+db_cfg yoda analysis/analysis.sqlite
+touch "${ROOT}/state/refresh-requested"; FAKE_GOCMD_LSL_FAIL=1 "${TMP}/ddp-refresh.sh" || true
+check "db yoda unreachable: phase error"     status_is .phase error
+check "db yoda unreachable: says try again"  message_has "Could not reach the data store"
+check "db yoda unreachable: not 'not found'" bash -c "! jq -r .message '${ROOT}/state/refresh-status.json' | grep -q 'not found'"
+check "db yoda unreachable: database kept"   grep -qx database-v3 "${ADB}"
+
+# 10f4. not enough room on the volume: refused before the download
+touch -d @1700000300 "${RDB}"   # a new listing, same content
+: > "${FAKE_GOCMD_LOG}"
+touch "${ROOT}/state/refresh-requested"; FAKE_DF_AVAIL_KB=0 "${TMP}/ddp-refresh.sh" || true
+check "db no room: phase error"              status_is .phase error
+check "db no room: says how much it needs"   message_has "There isn't enough room on the storage volume for the analysis database (needs about 11 bytes)."
+check "db no room: nothing fetched"          bash -c "! grep -q ' get ' '${FAKE_GOCMD_LOG}'"
+check "db no room: database kept"            grep -qx database-v3 "${ADB}"
+check "db no room: no staging left"          no_db_staging
+check "db with room: run succeeds"           run_refresh
+check "db with room: fetch names the size"   grep -qF "fetching the analysis database (11 bytes)" "${ROOT}/state/refresh.log"
+
+# 10f5. the size from an ils-style listing, human-readable
+mkdir -p "${FAKE_REMOTE}/coll/big"; truncate -s 33G "${FAKE_REMOTE}/coll/big/analysis.sqlite"
+db_cfg yoda big/analysis.sqlite
+touch "${ROOT}/state/refresh-requested"; FAKE_GOCMD_LS_FORMAT=ils FAKE_DF_AVAIL_KB=1048576 "${TMP}/ddp-refresh.sh" || true
+check "db size (ils listing): 33 GB needed"  message_has "(needs about 33 GB)."
+rm -rf "${FAKE_REMOTE}/coll/big"
+
 # 10g. warm-up failing in database mode: done, but no file count from the inbox
 db_cfg yoda analysis/analysis.sqlite
 echo '{}' > "${ROOT}/data/inbox/stale.json"
@@ -603,6 +663,20 @@ db_cfg rd-link analysis/missing.sqlite
 touch "${ROOT}/state/refresh-requested"; "${TMP}/ddp-refresh.sh" || true
 check "db rd-link missing: phase error"      status_is .phase error
 check "db rd-link missing: names the path"   message_has "not found at analysis/missing.sqlite"
+db_cfg rd-link analysis
+: > "${FAKE_RCLONE_LOG}"
+touch "${ROOT}/state/refresh-requested"; "${TMP}/ddp-refresh.sh" || true
+check "db rd-link folder: says not found"    message_has "The analysis database was not found at analysis in the study folder."
+check "db rd-link folder: nothing copied"    bash -c "! grep -q '^rclone copy' '${FAKE_RCLONE_LOG}'"
+db_cfg rd-link analysis/analysis.sqlite
+touch "${ROOT}/state/refresh-requested"; FAKE_RCLONE_LSL_FAIL=1 "${TMP}/ddp-refresh.sh" || true
+check "db rd-link unreachable: try again"    message_has "Could not reach the data store"
+check "db rd-link unreachable: not 'not found'" bash -c "! jq -r .message '${ROOT}/state/refresh-status.json' | grep -q 'not found'"
+touch -d @1700000200 "${FAKE_RD}/analysis/analysis.sqlite"
+touch "${ROOT}/state/refresh-requested"; FAKE_DF_AVAIL_KB=0 "${TMP}/ddp-refresh.sh" || true
+check "db rd-link no room: size from lsl"    message_has "(needs about 14 bytes)."
+check "db rd-link no room: nothing copied"   bash -c "! grep -q '^rclone copy' '${FAKE_RCLONE_LOG}'"
+check "db rd-link no room: database kept"    grep -qx rd-database-v2 "${ADB}"
 export FAKE_RD="${RD_KEEP}"
 
 # 10j. local: the database is a symlink to the folder's file, never a copy

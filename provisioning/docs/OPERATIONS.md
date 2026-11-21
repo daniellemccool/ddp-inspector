@@ -129,16 +129,22 @@ tars: all shards are pulled before any is unpacked, so the volume needs
 roughly the tar total plus the unpacked tree.
 
 **Database mode.** When Setup declares an analysis database (a path
-relative to the study folder, e.g. `analysis/analysis.sqlite`), the
+relative to the study folder, e.g. `analysis/out/analysis.sqlite`, the
+Setup default; it names the file, never a folder), the
 refresh fetches ONLY that file, in every source mode: no donations, no
 transcripts or transcript tars, nothing unpacked. The pages read
-everything from the database.
+everything from the database. While the database is declared but not yet
+fetched, or is not a pipeline analysis database, the pages show only a
+notice: they never fall back to the donations or the transcript tree.
 
 - Yoda: `gocmd ls -l` on the file; Research Drive: `rclone lsl` on it. The
-  listing (size and modification time) is compared with the one stored at
-  the last fetch in `state/analysis-db.remote`; the file is downloaded only
-  when the listing differs or the local copy is missing ("The analysis
-  database is up to date." otherwise). The download lands in
+  listing must name that one file (a folder path is refused as not found,
+  before anything is downloaded). The listing (size and modification
+  time) is compared with the one stored at the last fetch in
+  `state/analysis-db.remote`; the file is downloaded only when the listing
+  differs or the local copy is missing ("The analysis database is up to
+  date." otherwise), and only when the free space under `data/analyses/`
+  is at least the listed size. The download lands in
   `data/analyses/.analysis-db-staging/` and is renamed over
   `data/analyses/analysis.sqlite`, so pages never read a partial file; the
   listing is stored only after that swap.
@@ -147,8 +153,9 @@ everything from the database.
 - The participant count after a refresh is the participants who donated,
   from the database.
 - On a workspace that used the transcript tars before, the unpacked tree
-  `data/analyses/transcripts/` is no longer read and can be deleted once
-  database mode works.
+  `data/analyses/transcripts/` is never read while a database is declared.
+  Safe order: declare the database in Setup, fetch, check that the pages
+  read it, then delete the old tree.
 
 ## 5. Research Drive share links
 
@@ -178,6 +185,7 @@ The refresh is flock-serialized and idempotent — re-running after any
 failure is always safe.
 
 **Database mode (§4):** the log says `analysis database up to date` or
+`fetching the analysis database (<size>)` then
 `fetched the analysis database (<bytes> bytes)`. To force a re-fetch
 (e.g. a suspect local copy), delete the stored listing and refresh:
 
@@ -185,8 +193,13 @@ failure is always safe.
 
 A failed download leaves the previous database in place and no staging
 files behind. "The analysis database was not found at <path> in the study
-folder" means the declared path does not exist under the study folder:
-fix the path in Settings.
+folder" means the declared path does not exist under the study folder,
+or names a folder rather than the file: fix the path in Settings. "Could
+not reach the data store to check the analysis database" is a failed
+listing for another reason (network, server); the gocmd/rclone error is in
+the log. "There isn't enough room on the storage volume…" means the free
+space under `data/analyses/` is below the database size: grow the volume
+(§3) or free space on it.
 
 **Site down with ERR_CONNECTION_REFUSED:** check `sudo systemctl status
 nginx`. SRC-Nginx's `authentication.conf` proxies to
