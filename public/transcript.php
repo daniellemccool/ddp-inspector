@@ -15,9 +15,9 @@ if (!preg_match('/^\d{19}$/D', $vid)) {
     return;
 }
 
-$paths = analysis_transcript_paths($vid);
-$txt = $paths['txt'] !== null ? file_get_contents($paths['txt']) : null;
-$meta = $paths['json'] !== null ? json_decode((string)file_get_contents($paths['json']), true) : null;
+$transcript = study_transcript($vid);
+$txt = $transcript['text'] ?? null;
+$meta = $transcript['meta'] ?? null;
 
 /**
  * Segment text + average token confidence, skipping special tokens

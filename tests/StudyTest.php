@@ -57,6 +57,28 @@ try { $db->exec("INSERT INTO meta VALUES ('x', 'y')"); } catch (Throwable $t) { 
 eq($threw, true, 'INSERT through the read-only connection throws');
 eq((int)(new PDO('sqlite:' . $dbfile))->query("SELECT COUNT(*) FROM meta WHERE key = 'x'")->fetchColumn(), 0, 'nothing was written');
 
+// Request memo: the status is remembered per (file, size, mtime) and reuses
+// study_db()'s connection; study_reset() forgets both.
+$m0 = filemtime($dbfile);
+$fh = fopen($dbfile, 'r+'); fwrite($fh, str_repeat("\0", 16)); fclose($fh); // corrupt the header in place
+touch($dbfile, $m0);                                                         // same path, size and mtime
+eq(study_db_status(), 'ok', 'status is memoised while file, size and mtime are unchanged');
+eq(study_db(), $db, 'the memo keeps the one connection');
+study_reset();
+eq(study_db_status(), 'invalid', 'study_reset() forgets the memo, so the shape check runs again');
+
+study_test_build_db($dbfile);
+check(study_db() instanceof PDO, 'connection available again after the rebuild');
+$w = new PDO('sqlite:' . $dbfile); $w->exec("DELETE FROM participant WHERE participant_id = 'pe'"); $w = null;
+touch($dbfile, filemtime($dbfile)); // whatever the clock did, keep the mtime the memo may hold
+study_reset();
+$db2 = study_db();
+check($db2 instanceof PDO && $db2 !== $db, 'after study_reset() a new connection is opened');
+eq((int)$db2->query('SELECT COUNT(*) FROM participant')->fetchColumn(), 4, 'after study_reset() the rebuilt file is read');
+touch($dbfile, time() + 60);
+$db3 = study_db();
+check($db3 instanceof PDO && $db3 !== $db2, 'a new mtime invalidates the memo without a reset');
+
 // Developer mode: no storage root, location comes from config.
 // A missing column makes the shape invalid.
 $bad = "$sc/bad.sqlite";
@@ -69,5 +91,60 @@ $GLOBALS['__cfg'] = ['ddp_dir' => __DIR__ . '/fixtures/ddp'];
 eq(study_db_file(), null, 'no file location without storage root or config');
 eq(study_db_status(), 'off', 'developer mode without analysis_db is off');
 
+// Raw backend (developer config: fixture donations + transcripts tree, no database).
+$GLOBALS['__cfg'] = require __DIR__ . '/config.test.php';
+study_reset();
+eq(study_mode(), 'raw', 'developer config without analysis_db is raw');
+
+$p1 = study_participant('p1', 1, 1, false);
+check(is_array($p1), 'raw: known participant returns data');
+eq($p1['id'] ?? null, 'p1', 'raw: participant id');
+$tt = $p1['platforms']['tiktok'] ?? null;
+check(is_array($tt), 'raw: tiktok platform present');
+eq($tt['title'] ?? null, 'Tiktok', 'raw: platform title falls back to the prettified slug without flows');
+eq($tt['notes'] ?? null, [], 'raw: no notes for a single donation');
+$fixtureRows = ddp_parse_file(__DIR__ . '/fixtures/ddp/assignment=1_task=1_participant=p1_source=tiktok_key=1-tiktok.json')['tables'];
+$watch = null;
+foreach ($tt['sections'] ?? [] as $s) { if ($s['key'] === 'tiktok_watch_history') { $watch = $s; } }
+check(is_array($watch), 'raw: watch section present');
+eq($watch['total'] ?? null, count($fixtureRows['tiktok_watch_history']), 'raw: watch total = fixture row count');
+eq($watch['title'] ?? null, 'Tiktok watch history', 'raw: unmatched section title is the prettified key');
+eq($watch['columns'] ?? null, ['Date', 'Link'], 'raw: unmatched section columns are the row keys');
+eq($watch['with_artifacts'] ?? null, 1, 'raw: one watch row has a transcript');
+eq($watch['hidden'] ?? null, count($fixtureRows['tiktok_watch_history']) - 1, 'raw: the others are hidden');
+eq(count($watch['sample'] ?? []), 1, 'raw: 1-row sample');
+eq($watch['sample'][0]['links'] ?? null, [['label' => 'transcript', 'url' => 'transcript.php?vid=7000000000000000029']],
+   'raw: sampled row links to its transcript');
+check(array_key_exists('reason', $watch['sample'][0] ?? []) && $watch['sample'][0]['reason'] === null, 'raw: no availability reason');
+eq($watch['sample'][0]['row']['Date'] ?? null, '2026-07-05 11:53:55', 'raw: sampled row carries its cells as strings');
+eq($tt['scope']['tiktok_watch_history'] ?? null, stats_section_summary($fixtureRows['tiktok_watch_history']),
+   'raw: scope per table');
+$pAll = study_participant('p1', 15, 1, true);
+$watchAll = null;
+foreach ($pAll['platforms']['tiktok']['sections'] as $s) { if ($s['key'] === 'tiktok_watch_history') { $watchAll = $s; } }
+eq([$watchAll['with_artifacts'], $watchAll['hidden'], count($watchAll['sample'])], [3, 0, 3], 'raw: all=true hides nothing');
+eq(study_participant('nope', 15, 1, false), null, 'raw: unknown participant -> null');
+
+$tx = study_transcript('7000000000000000029');
+check(str_contains((string)($tx['text'] ?? ''), 'Hello world'), 'raw: transcript text read from the tree');
+check(is_array($tx['meta'] ?? null) && isset($tx['meta']['raw_signals']), 'raw: transcript meta is the artifact JSON');
+check(array_key_exists('availability', $tx ?? []) && $tx['availability'] === null, 'raw: no availability');
+eq(study_transcript('1111111111111111111'), ['text' => null, 'meta' => null, 'availability' => null], 'raw: untranscribed video');
+
+$list = study_participants();
+check(isset($list['participants']['p1']), 'raw: participant list has p1');
+check(!isset($list['participants']['preview']), 'raw: preview file is not a participant');
+$previewSkipped = array_values(array_filter($list['skipped'], fn($s) => $s['participant'] === 'preview'));
+eq(count($previewSkipped), 1, 'raw: skipped lists the preview file');
+eq($previewSkipped[0]['kind'] ?? null, 'declined', 'raw: preview file is a declined donation');
+eq(study_donation_count(), 2, 'raw: donation count = donation files');
+
+$GLOBALS['__cfg'] = ['ddp_dir' => __DIR__ . '/fixtures/ddp2'];
+$p2 = study_participant('p2', 15, 1, true);
+eq(count($p2['platforms']['instagram']['notes'] ?? []), 1, 'raw: superseded donation produces one note');
+check(str_contains($p2['platforms']['instagram']['notes'][0] ?? '', 'donated more than once for this platform')
+      && str_contains($p2['platforms']['instagram']['notes'][0] ?? '', '(1 older file(s) ignored)'), 'raw: superseded note text');
+
 $GLOBALS['__cfg'] = $saved_study_cfg;
+study_reset();
 exec('rm -rf ' . escapeshellarg($sc));

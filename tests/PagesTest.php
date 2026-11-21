@@ -158,6 +158,37 @@ check(!str_contains($guarded, '<table'), 'guard-blocked page renders no particip
 $GLOBALS['__cfg'] = $__saved_cfg_guard;
 exec('rm -rf ' . escapeshellarg($guardScratch));
 
+// --- analysis database declared but not usable: pages say so instead of
+//     falling back silently (they still render the raw donations) ---
+$noticeScratch = sys_get_temp_dir() . '/ddp-inspector-pages-notice-' . getmypid();
+exec('rm -rf ' . escapeshellarg($noticeScratch));
+@mkdir("$noticeScratch/data/inbox", 0755, true);
+copy(__DIR__ . '/fixtures/ddp/assignment=1_task=1_participant=p1_source=tiktok_key=1-tiktok.json',
+     "$noticeScratch/data/inbox/assignment=1_task=1_participant=p1_source=tiktok_key=1-tiktok.json");
+$__saved_cfg_notice = $GLOBALS['__cfg'];
+$GLOBALS['__cfg'] = ['storage_root' => $noticeScratch, 'default_n' => 15, 'base_path' => ''];
+inst_save(['study_name' => 'Notice test', 'source_mode' => 'local', 'local_path' => "$noticeScratch/data/inbox",
+           'cadence' => 'off', 'default_n' => 15,
+           'analyses' => ['database' => ['enabled' => true, 'path' => 'analysis.sqlite']]]);
+study_reset();
+$noticeIndex = render_page('index.php', ['all' => '1']);
+check(str_contains($noticeIndex, '<p class="notice">The analysis database hasn&#039;t been fetched yet'),
+      'declared database missing -> index shows the not-fetched notice');
+check(str_contains($noticeIndex, 'participant.php?id=p1'), 'index still lists raw donations under the notice');
+$noticeParticipant = render_page('participant.php', ['id' => 'p1', 'seed' => '1', 'n' => '5']);
+check(str_contains($noticeParticipant, '<p class="notice">The analysis database hasn&#039;t been fetched yet'),
+      'declared database missing -> participant page shows the not-fetched notice');
+@mkdir("$noticeScratch/data/analyses", 0755, true);
+file_put_contents("$noticeScratch/data/analyses/analysis.sqlite", 'not a database');
+$noticeIndex = render_page('index.php', []);
+check(str_contains($noticeIndex, '<p class="notice">The analysis database doesn&#039;t look like a pipeline analysis database.'),
+      'declared database with the wrong shape -> index shows the shape notice');
+$GLOBALS['__cfg'] = $__saved_cfg_notice;
+study_reset();
+exec('rm -rf ' . escapeshellarg($noticeScratch));
+$plainIndex = render_page('index.php', []);
+check(!str_contains($plainIndex, 'analysis database'), 'no database declared -> no notice');
+
 // §7 ground-truth guard: the generic path must reproduce exact per-table row
 // counts. Uses the synthetic examples/ dataset when present (regenerable via
 // examples/generate.py; counts fixed by its seed).

@@ -3,9 +3,8 @@ require_once __DIR__ . '/../src/bootstrap.php';
 if (!cfg_ready()) { http_response_code(500); echo 'Configuration missing. Copy config.php.example to config.php.'; return; }
 if (!guard_configured()) { return; }
 
-$txIds = analysis_available_ids('transcripts');
-$ctx = ['ids' => $txIds, 'fp' => analysis_ids_fingerprint($txIds)];
-$loaded = ddp_load_dir_summaries((string)inst_effective_ddp_dir(), $ctx);
+$loaded = study_participants();
+$notice = study_db_notice();
 $showAll = ($_GET['all'] ?? '') === '1';
 $status = inst_status();
 $storageMode = inst_root() !== null;
@@ -50,11 +49,12 @@ if ($storageMode) { csrf_token(); }
     <?php endif; ?>
   </header>
   <h1>Participants</h1>
+  <?php if ($notice !== null): ?><p class="notice"><?= h($notice) ?></p><?php endif; ?>
   <?php if ($storageMode): ?>
     <div class="toolbar">
       <p class="meta">
         <?php if (!empty($status['finished_at'])): ?>Last updated <?= h((string)$status['finished_at']) ?> ·<?php endif; ?>
-        <?= inst_donation_count() ?> donation file(s)
+        <?= study_donation_count() ?> donation file(s)
       </p>
       <form method="post" action="<?= h(url('setup.php')) ?>">
         <?= csrf_field() ?><input type="hidden" name="action" value="refresh_now">
