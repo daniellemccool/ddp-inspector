@@ -59,7 +59,9 @@ h2 { margin:var(--space-48) 0 var(--space-8); font:420 1.6875rem/1.2 var(--font-
 h3 { margin:var(--space-32) 0 var(--space-4); font:700 1.0625rem/1.3 var(--font-sans); }
 p { margin:var(--space-8) 0; }
 h1 .eyebrow { display:block; margin:0 0 10px; }
-h1 .id { overflow-wrap:anywhere; }
+/* An id is data, not a heading: it is set in the sans, like the header's name. */
+h1 .id { display:block; font:800 1.5rem/1.25 var(--font-sans); font-variant-numeric:tabular-nums;
+         overflow-wrap:anywhere; }
 
 a { color:inherit; font-weight:700; text-decoration:underline dotted var(--sky);
     text-decoration-thickness:var(--line-underline); text-underline-offset:var(--line-underline-offset);
