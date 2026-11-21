@@ -150,7 +150,11 @@ check(!is_dir("$flowsDir/bombplatform"), 'nothing installed for the rejected bom
 // extracts entries to disk under their own names anyway — only the fixed filenames
 // documentation.txt and build-meta.json are ever written. Pin the OUTCOME, not the
 // mechanism: no file may ever land outside the flows dir, regardless of whether
-// ingestion itself succeeds or fails.
+// ingestion itself succeeds or fails. Crafting such a zip needs ZipArchive
+// (php-zip), a test-only dependency: the app itself reads zips with PharData.
+if (!class_exists('ZipArchive')) {
+    fwrite(STDERR, "SKIP: traversal-zip checks need the php-zip extension (ZipArchive)\n");
+} else {
 $travPid = getmypid();
 $travMarkerRel = sys_get_temp_dir() . "/ddp-flows-traversal-marker-$travPid.txt";
 $travMarkerAbs = sys_get_temp_dir() . "/ddp-flows-traversal-abs-marker-$travPid.txt";
@@ -167,3 +171,4 @@ $r = flows_ingest_upload($travZip, $flowsDir);
 check(!is_file($travMarkerRel), 'relative traversal entry never lands outside the flows dir');
 check(!is_file($travMarkerAbs), 'absolute-path entry never lands outside the flows dir');
 @unlink($travMarkerRel); @unlink($travMarkerAbs);
+}

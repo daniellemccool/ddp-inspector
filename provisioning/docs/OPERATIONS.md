@@ -240,13 +240,18 @@ volume, so updating = re-running it on the workspace from a fresh clone
 (the repo is public; the roles use only `ansible.builtin`, so plain
 ansible-core 2.18, SRC's version, is enough; `uv` is on SRC images):
 
+    rm -rf /tmp/ddpi                       # a leftover clone makes the next one fail
     git clone --depth 1 --branch <branch-or-main> \
       https://github.com/daniellemccool/ddp-inspector.git /tmp/ddpi
-    php /tmp/ddpi/tests/run.php            # app tests; php-cli is installed
+    sudo apt-get install -y php-sqlite3 php-zip   # test deps (sqlite3 is also the app's)
+    php /tmp/ddpi/tests/run.php            # must end "0 failed" before deploying
     sudo /usr/local/bin/uv tool run --from 'ansible-core>=2.18,<2.19' \
       ansible-playbook -i 127.0.0.1, /tmp/ddpi/provisioning/deploy-ddp-inspector.yaml
     rm -rf /tmp/ddpi
 
-Expect `failed=0`. Setup settings (data source, DAP, flows) survive. After
+The tests run before the playbook, so on a workspace provisioned before
+the analysis-database release the SQLite driver isn't there yet: the apt
+line installs it (the playbook installs it too). `php-zip` is only for one
+test; without it that test prints a SKIP line. Expect `failed=0`. Setup settings (data source, DAP, flows) survive. After
 the run, wait until a refresh started BEFORE the update has finished
 before reading the status line: it reflects the last completed run.
