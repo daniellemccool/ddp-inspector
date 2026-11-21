@@ -59,12 +59,53 @@ die() { # die <researcher-facing message>
   exit 1
 }
 count_donations() { find -L "${INBOX}" -maxdepth 1 -name '*.json' 2>/dev/null | wc -l | tr -d ' '; }
-ensure_real_inbox_dir() { # yoda/rd-link only: strip a stale local-mode symlink
-  # before pulling, so a source-mode switch never syncs/mirrors through it
-  # into whatever external folder it pointed at. Unlinking a symlink only
-  # removes the link itself — it never touches the target folder's contents.
+ensure_real_inbox_dir() { # before anything writes into the inbox: strip a
+  # local-mode symlink, so a source-mode switch (or a local folder that now
+  # holds an export) never syncs/mirrors/unpacks through it into whatever
+  # folder it pointed at. Unlinking a symlink only removes the link itself —
+  # it never touches the target folder's contents.
   [ -L "${INBOX}" ] && rm -f "${INBOX}"
   mkdir -p "${INBOX}"
+}
+newest_zip() { # newest_zip <dir>: the newest <YYYYMMDD>_<study>.zip in it, or nothing
+  find -L "$1" -maxdepth 1 -type f -name '*.zip' 2>/dev/null | sort | tail -n 1
+}
+extract_export_zip() { # extract_export_zip <zip>: a Next export -> the inbox
+  # Each export is a full snapshot, so the newest one IS the study's current
+  # state: extract only its donation files (…_source=…), not onboarding
+  # answers or Next preview-mode test donations, and mirror them into the
+  # inbox so a withdrawn donation disappears as well. Reads the zip only.
+  local zip="$1" stage="${ROOT}/data/.inbox-staging" rc
+  ensure_real_inbox_dir
+  write_status extracting - - "Unpacking donations…"
+  rm -rf "${stage}"; mkdir -p "${stage}"
+  # Next's export zips trip unzip 6.0's overlapped-components "zip bomb"
+  # check although every entry is intact (live finding 2026-11-20 on a
+  # real Next export), so that check is off: the zip is the study's own
+  # export from its data manager, not an untrusted upload. They also
+  # store no permission bits (unzip writes mode-000 files nobody can
+  # read), hence the chmod. -j flattens the study folder and rules out
+  # path traversal; exit 11 = no matching entries (no donations yet).
+  UNZIP_DISABLE_ZIPBOMB_DETECTION=TRUE \
+    unzip -q -j -o "${zip}" '*_source=*.json' -x '*_participant=preview_*' -d "${stage}"
+  rc=$?
+  [ "${rc}" -eq 0 ] || [ "${rc}" -eq 11 ] \
+    || die "Unpacking donations failed. Try refreshing again."
+  find "${stage}" -maxdepth 1 -type f -name '*.json' -exec chmod 0644 {} +
+  echo "[refresh] extracted $(find "${stage}" -maxdepth 1 -type f -name '*.json' | wc -l | tr -d ' ') donation file(s) from $(basename "${zip}")"
+  find "${INBOX}" -maxdepth 1 -type f -name '*.json' -delete
+  find "${stage}" -maxdepth 1 -type f -name '*.json' -exec mv -t "${INBOX}" {} +
+  rm -rf "${stage}"
+}
+link_inbox_to() { # link_inbox_to <folder>: local mode, the inbox IS that folder
+  if [ -L "${INBOX}" ]; then
+    # Already a symlink: only touch it if the target changed — removing/
+    # replacing a symlink never touches the old target's contents.
+    [ "$(readlink "${INBOX}")" = "$1" ] || { rm -f "${INBOX}"; ln -s "$1" "${INBOX}"; }
+  else
+    rm -rf "${INBOX}"   # our own real dir (an earlier pull), never a configured folder
+    ln -s "$1" "${INBOX}"
+  fi
 }
 
 MODE="$(jq -r '.source_mode // ""' "${INSTANCE}")"
@@ -107,42 +148,25 @@ case "${MODE}" in
     # rejected -T (live finding 2026-07-30). sync with a pam_password login
     # is not verified live yet, so keep get -f: it re-downloads instead of
     # delta-syncing; acceptable at donation scale.
+    # Under the study folder: inbox/, else the newest donations/ export. No
+    # "folder itself is the inbox" rule here, unlike rd-link/local: a Yoda
+    # collection never held loose donations, and Yoda folders carry their
+    # own yoda-metadata.json at the top.
     if gc ls "i:${COLLECTION}/inbox" >/dev/null 2>&1; then
       # Loose donation files in <collection>/inbox (the original layout).
       gc get -f "i:${COLLECTION}/inbox" "${ROOT}/data" \
         || die "Fetching donations stopped partway. This is usually temporary — try again in a few minutes."
     elif gc ls "i:${COLLECTION}/donations" >/dev/null 2>&1; then
-      # Next export zips in <collection>/donations/<YYYYMMDD>_<study>.zip.
-      # Each export is a full snapshot, so the newest one IS the study's
-      # current state: extract only its donation files (…_source=…), not
-      # onboarding answers or Next preview-mode test donations, and mirror
-      # them into the inbox so a withdrawn donation disappears as well.
+      # Next export zips in <collection>/donations/<YYYYMMDD>_<study>.zip;
+      # the newest one wins (extract_export_zip).
       rm -rf "${CACHE}/donations"
       gc get -f "i:${COLLECTION}/donations" "${CACHE}" \
         || die "Fetching donations stopped partway. This is usually temporary — try again in a few minutes."
-      ZIP="$(find "${CACHE}/donations" -maxdepth 1 -type f -name '*.zip' 2>/dev/null | sort | tail -n 1)"
+      ZIP="$(newest_zip "${CACHE}/donations")"
       [ -n "${ZIP}" ] \
         || die "The donations folder on the data store has no export in it yet — ask your data manager to upload the latest export, then try again."
-      write_status extracting - - "Unpacking donations…"
-      STAGE="${ROOT}/data/.inbox-staging"
-      rm -rf "${STAGE}"; mkdir -p "${STAGE}"
-      # Next's export zips trip unzip 6.0's overlapped-components "zip bomb"
-      # check although every entry is intact (live finding 2026-11-20 on a
-      # real Next export), so that check is off: the zip is the study's own
-      # export from its data manager, not an untrusted upload. They also
-      # store no permission bits (unzip writes mode-000 files nobody can
-      # read), hence the chmod. -j flattens the study folder and rules out
-      # path traversal; exit 11 = no matching entries (no donations yet).
-      UNZIP_DISABLE_ZIPBOMB_DETECTION=TRUE \
-        unzip -q -j -o "${ZIP}" '*_source=*.json' -x '*_participant=preview_*' -d "${STAGE}"
-      rc=$?
-      [ "${rc}" -eq 0 ] || [ "${rc}" -eq 11 ] \
-        || die "Unpacking donations failed. Try refreshing again."
-      find "${STAGE}" -maxdepth 1 -type f -name '*.json' -exec chmod 0644 {} +
-      echo "[refresh] extracted $(find "${STAGE}" -maxdepth 1 -type f -name '*.json' | wc -l | tr -d ' ') donation file(s) from $(basename "${ZIP}")"
-      find "${INBOX}" -maxdepth 1 -type f -name '*.json' -delete
-      find "${STAGE}" -maxdepth 1 -type f -name '*.json' -exec mv -t "${INBOX}" {} +
-      rm -rf "${STAGE}" "${CACHE}/donations"
+      extract_export_zip "${ZIP}"
+      rm -rf "${CACHE}/donations"
     else
       die "No donations were found in that folder on the data store. Check the folder path in Setup with your data manager."
     fi
@@ -176,24 +200,58 @@ case "${MODE}" in
     RFLAGS=(--webdav-url "${URL}" --webdav-vendor owncloud
             --webdav-user "${TOKEN}" --webdav-pass "${PASS_OBSCURED}")
     write_status probing - - "Checking the connection to Research Drive…"
-    "${RCLONE}" lsd :webdav: "${RFLAGS[@]}" >/dev/null \
+    # The listing of the shared (study) folder doubles as the connection
+    # check: dirs come back with a trailing /, files without.
+    TOP="$("${RCLONE}" lsf :webdav: "${RFLAGS[@]}")" \
       || die "Could not open the Research Drive share link. The link may have expired or the password may be wrong — create a new share link, paste it in Setup, and try again."
     write_status pulling - - "Fetching donations…"
     ensure_real_inbox_dir
-    "${RCLONE}" sync :webdav: "${INBOX}" "${RFLAGS[@]}" --include '*.json' \
-      || die "Fetching donations stopped partway. This is usually temporary — try again in a few minutes."
+    # Under the shared folder: donation files right in it (a share of the
+    # donations folder itself, as before), else inbox/, else the newest
+    # donations/ export. --max-depth 1: the inbox is flat, never pull a
+    # subfolder's files along.
+    if grep -q '\.json$' <<<"${TOP}"; then
+      "${RCLONE}" sync :webdav: "${INBOX}" "${RFLAGS[@]}" --include '*.json' --max-depth 1 \
+        || die "Fetching donations stopped partway. This is usually temporary — try again in a few minutes."
+    elif grep -qx 'inbox/' <<<"${TOP}"; then
+      "${RCLONE}" sync :webdav:inbox "${INBOX}" "${RFLAGS[@]}" --include '*.json' --max-depth 1 \
+        || die "Fetching donations stopped partway. This is usually temporary — try again in a few minutes."
+    elif grep -qx 'donations/' <<<"${TOP}"; then
+      ZIPS="$("${RCLONE}" lsf :webdav:donations "${RFLAGS[@]}" --files-only --include '*.zip')" \
+        || die "Fetching donations stopped partway. This is usually temporary — try again in a few minutes."
+      ZIP="$(sort <<<"${ZIPS}" | tail -n 1)"
+      [ -n "${ZIP}" ] \
+        || die "The donations folder in the share has no export in it yet — ask your data manager to upload the latest export, then try again."
+      rm -rf "${CACHE}/donations"
+      "${RCLONE}" copy ":webdav:donations/${ZIP}" "${CACHE}/donations" "${RFLAGS[@]}" \
+        || die "Fetching donations stopped partway. This is usually temporary — try again in a few minutes."
+      [ -f "${CACHE}/donations/${ZIP}" ] \
+        || die "Fetching donations stopped partway. This is usually temporary — try again in a few minutes."
+      extract_export_zip "${CACHE}/donations/${ZIP}"
+      rm -rf "${CACHE}/donations"
+    else
+      die "No donations were found in the shared folder. Check with your data manager that the share link points at the study's folder."
+    fi
     ;;
   local)
     LOCAL_PATH="$(jq -r '.local_path // ""' "${INSTANCE}")"
     [ -n "${LOCAL_PATH}" ] && [ -d "${LOCAL_PATH}" ] && [ -r "${LOCAL_PATH}" ] \
       || die "The configured folder (${LOCAL_PATH:-not set}) is missing or unreadable on this workspace — an operator needs to check the Setup 'folder on this workspace' path."
-    if [ -L "${INBOX}" ]; then
-      # Already a symlink: only touch it if the configured folder changed —
-      # removing/replacing a symlink never touches the old target's contents.
-      [ "$(readlink "${INBOX}")" = "${LOCAL_PATH}" ] || { rm -f "${INBOX}"; ln -s "${LOCAL_PATH}" "${INBOX}"; }
+    # Under the configured (study) folder: donation files right in it (a
+    # pipeline inbox, as before) or in inbox/ -> the inbox is a symlink to
+    # that folder; else the newest donations/ export, unpacked into a real
+    # inbox dir. Nothing inside the configured folder is ever written.
+    if [ -n "$(find -L "${LOCAL_PATH}" -maxdepth 1 -type f -name '*.json' -print -quit 2>/dev/null)" ]; then
+      link_inbox_to "${LOCAL_PATH}"
+    elif [ -d "${LOCAL_PATH}/inbox" ]; then
+      link_inbox_to "${LOCAL_PATH}/inbox"
+    elif [ -d "${LOCAL_PATH}/donations" ]; then
+      ZIP="$(newest_zip "${LOCAL_PATH}/donations")"
+      [ -n "${ZIP}" ] \
+        || die "The donations folder has no export in it yet — ask your data manager to add the latest export, then try again."
+      extract_export_zip "${ZIP}"
     else
-      rm -rf "${INBOX}"
-      ln -s "${LOCAL_PATH}" "${INBOX}"
+      die "No donations were found in that folder on this workspace. Check the folder in Setup — it should be the study's folder."
     fi
     ;;
   *)

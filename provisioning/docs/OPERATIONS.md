@@ -40,7 +40,8 @@ Component order in ANY item that includes the inspector:
   the externals (preflight fails otherwise, naming the fix).
 - "Research Drive by Link" is OPTIONAL and not the researcher path (D9);
   add it only when an operator prefers a provision-time mount, and use the
-  app's "folder on this workspace" mode pointed at `/data/<mountdir>`.
+  app's "folder on this workspace" mode pointed at the study's folder
+  under `/data/<mountdir>`.
 - Piggyback notes:
   - **mono items**: mono needs no volume, the inspector DOES — attach a
     small one at launch or preflight fails (by design; no boot-disk
@@ -48,7 +49,15 @@ Component order in ANY item that includes the inspector:
   - **ddp-transcribe items**: add SRC-Nginx (that item is SSH-only today).
     The inspector shares the pipeline volume safely — everything it writes
     lives under `<volume>/ddp-inspector/`. For a co-located viewer, use the
-    app's local mode pointed at the pipeline's `<volume>/inbox`.
+    app's local mode pointed at the study's folder on the volume.
+- Every mode points at the study's TOP folder (Yoda: the folder path;
+  Research Drive: the shared folder; local: the folder on this workspace)
+  and finds the donations under it the same way: donation `*.json` files
+  in the folder itself (Research Drive and local only — a folder of
+  donations, as older setups and the pipeline's `<volume>/inbox` are),
+  else `inbox/*.json`, else the newest `donations/<YYYYMMDD>_<study>.zip`
+  (see §4). Local mode links the inbox to that folder (never writes into
+  it); an export is unpacked into the inspector's own inbox.
   - Components attach to ITEMS, not running workspaces — piggybacking means
     editing the item and launching fresh.
 - Firewall: item defaults (22/80/443) suffice; everything the inspector
@@ -119,10 +128,16 @@ roughly the tar total plus the unpacked tree.
 
 ## 5. Research Drive share links
 
-Researcher-self-serve in the RD web portal: share the donations folder by
+Researcher-self-serve in the RD web portal: share the study's folder by
 link, READ-ONLY, with a password. The app's Setup asks for the link and
 password and syncs via WebDAV — no CO secrets, no provision-time wiring.
 Rotation = create a new link, paste it in Setup.
+
+The refresh lists the shared folder and pulls only the donations (§2): its
+own `*.json` files (an older share of the donations folder itself), else
+`inbox/*.json`, else the newest `donations/*.zip` (copied to the cache,
+unpacked, removed). Only one level deep — subfolders are never pulled
+along.
 
 ## 6. Debugging a refresh
 

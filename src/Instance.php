@@ -191,7 +191,19 @@ function inst_probe(): array {
             return ['ok' => false, 'count' => null,
                     'message' => 'That folder cannot be read. Check the path with whoever set up this workspace.'];
         }
-        $n = count(glob(rtrim($dir, '/') . '/*.json') ?: []);
+        // The study's folder: donations right in it (as before), else in
+        // inbox/, else a donations/ export — the refresh's order. Never
+        // recursive and never opens a zip, so the check stays cheap.
+        $dir = rtrim($dir, '/');
+        if (!inst_dir_has_donations($dir)) {
+            if (is_dir("$dir/inbox")) {
+                $dir .= '/inbox';
+            } elseif ((glob("$dir/donations/*.zip") ?: []) !== []) {
+                return ['ok' => true, 'count' => null,
+                        'message' => 'Found the donations export ✓ — it is unpacked when you fetch.'];
+            }
+        }
+        $n = count(glob("$dir/*.json") ?: []);
         return ['ok' => true, 'count' => $n, 'message' => "Found $n donation file(s) ✓"];
     }
     $src = inst_source_load();

@@ -45,7 +45,14 @@ case "${1:-}" in
   local)
     P="$(jq -r '.local_path // ""' "${INSTANCE}" 2>/dev/null)"
     if [ -n "${P}" ] && [ -d "${P}" ] && [ -r "${P}" ]; then
-      echo "Folder found ($(find -L "${P}" -maxdepth 1 -name '*.json' | wc -l | tr -d ' ') donation files)."
+      # Same order as the refresh: the folder itself, else inbox/, else an export.
+      N="$(find -L "${P}" -maxdepth 1 -type f -name '*.json' | wc -l | tr -d ' ')"
+      if [ "${N}" -eq 0 ] && [ -d "${P}/inbox" ]; then
+        N="$(find -L "${P}/inbox" -maxdepth 1 -type f -name '*.json' | wc -l | tr -d ' ')"
+      elif [ "${N}" -eq 0 ] && [ -n "$(find -L "${P}/donations" -maxdepth 1 -type f -name '*.zip' -print -quit 2>/dev/null)" ]; then
+        echo "Folder found (donations export found; it is unpacked when you refresh)."; exit 0
+      fi
+      echo "Folder found (${N} donation files)."
     else
       echo "That folder is missing or unreadable on this workspace."
       exit 1
