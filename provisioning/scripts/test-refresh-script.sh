@@ -34,6 +34,10 @@ export FAKE_RD="${TMP}/rd"; mkdir -p "${FAKE_RD}"
 # FAKE_GOCMD_GET_FAIL=1 = a get copies the data, then fails (stopped partway).
 # FAKE_GOCMD_LS_FORMAT=ils = ls -l prints an ils-style line instead
 # ("  <replica> <owner> <resource> <size> <date.time> & <name>", tab-separated).
+# FAKE_GOCMD_LS_FORMAT=table = ls -l prints the real gocmd v0.12.2 table (live
+# 2026-11-21): a "TYPE PATH OWNER …" header, then per replica
+# " data-object  <full logical path>  <owner>  <replica>  <resources>  <size>
+# <YYYY-MM-DD.HH:MM>  Good"; FAKE_GOCMD_REPLICAS = replicas per object (1).
 # FAKE_GOCMD_LSL_FAIL=1 = ls -l cannot reach the server (plain ls still works).
 export FAKE_YODA_PASSWORD="dap-secret"
 export FAKE_GOCMD_ENV_COPY="${TMP}/gocmd-env-copy.json"
@@ -56,9 +60,15 @@ while [ $# -gt 0 ]; do
     *)  if [ -z "${cmd}" ]; then cmd="$1"; else args+=("$1"); fi; shift ;;
   esac
 done
-lsl() {
+lsl() { # lsl <local file> <logical path>
   if [ "${FAKE_GOCMD_LS_FORMAT:-}" = ils ]; then
     printf '  0\tr@uu.nl\tdemoResc\t%s\t%s\t&\t%s\n' "$(stat -c %s "$1")" "$(date -u -r "$1" '+%F.%H:%M')" "$(basename "$1")"
+  elif [ "${FAKE_GOCMD_LS_FORMAT:-}" = table ]; then
+    local r
+    for ((r = 0; r < ${FAKE_GOCMD_REPLICAS:-1}; r++)); do
+      printf ' data-object  %s  r@uu.nl  %13s  demoResc;n1;n1_nfs  %s  %s  Good   \n' \
+        "$2" "${r}" "$(stat -c %s "$1")" "$(date -u -r "$1" '+%F.%H:%M')"
+    done
   else echo "$(stat -c '%s %Y' "$1") $(basename "$1")"; fi
 }
 case "${cmd}" in
@@ -66,9 +76,13 @@ case "${cmd}" in
           echo "failed to establish a connection to the iRODS server" >&2; exit 1
         fi
         p="$(resolve "${args[0]}")"; [ -e "${p}" ] || { echo "not found" >&2; exit 1; }
+        lp="${args[0]#i:}"
+        if [ "${long}" = 1 ] && [ "${FAKE_GOCMD_LS_FORMAT:-}" = table ]; then
+          echo ' TYPE         PATH                      OWNER     REPLICA NO.  RESOURCE HIERARCHY  SIZE  MODIFY TIME       STATUS '
+        fi
         if [ "${long}" = 0 ]; then ls "${p}"
-        elif [ -d "${p}" ]; then for e in "${p}"/*; do [ -f "${e}" ] && lsl "${e}"; done; exit 0
-        else lsl "${p}"; fi ;;
+        elif [ -d "${p}" ]; then for e in "${p}"/*; do [ -f "${e}" ] && lsl "${e}" "${lp}/$(basename "${e}")"; done; exit 0
+        else lsl "${p}" "${lp}"; fi ;;
   sync) s="$(resolve "${args[0]}")"; d="$(resolve "${args[1]}")"
         if [ -d "${d}" ]; then cp -r "${s}" "${d}/"; else mkdir -p "${d}"; cp -r "${s}/." "${d}/"; fi ;;
   get)  s="$(resolve "${args[0]}")"; d="${args[1]}"; cp -r "${s}" "${d}"
@@ -613,7 +627,33 @@ mkdir -p "${FAKE_REMOTE}/coll/big"; truncate -s 33G "${FAKE_REMOTE}/coll/big/ana
 db_cfg yoda big/analysis.sqlite
 touch "${ROOT}/state/refresh-requested"; FAKE_GOCMD_LS_FORMAT=ils FAKE_DF_AVAIL_KB=1048576 "${TMP}/ddp-refresh.sh" || true
 check "db size (ils listing): 33 GB needed"  message_has "(needs about 33 GB)."
+# 10f6. the real gocmd v0.12.2 table (header, path mid-line, status column):
+# the size is read from it too
+touch "${ROOT}/state/refresh-requested"; FAKE_GOCMD_LS_FORMAT=table FAKE_DF_AVAIL_KB=1048576 "${TMP}/ddp-refresh.sh" || true
+check "db size (gocmd table): 33 GB needed"  message_has "(needs about 33 GB)."
 rm -rf "${FAKE_REMOTE}/coll/big"
+
+# 10f7. the real gocmd table with two replicas: fetched once, then up to date
+db_cfg yoda analysis/analysis.sqlite
+touch -d @1700000400 "${RDB}"   # a new listing
+: > "${FAKE_GOCMD_LOG}"
+touch "${ROOT}/state/refresh-requested"
+check "db gocmd table: run succeeds"         env FAKE_GOCMD_LS_FORMAT=table FAKE_GOCMD_REPLICAS=2 "${TMP}/ddp-refresh.sh"
+check "db gocmd table: phase done"           status_is .phase done
+check "db gocmd table: database fetched"     grep -q ' get ' "${FAKE_GOCMD_LOG}"
+check "db gocmd table: no staging left"      no_db_staging
+: > "${FAKE_GOCMD_LOG}"
+touch "${ROOT}/state/refresh-requested"
+check "db gocmd table again: run succeeds"   env FAKE_GOCMD_LS_FORMAT=table FAKE_GOCMD_REPLICAS=2 "${TMP}/ddp-refresh.sh"
+check "db gocmd table again: up to date"     message_has "The analysis database is up to date."
+check "db gocmd table again: no download"    bash -c "! grep -q ' get ' '${FAKE_GOCMD_LOG}'"
+
+# 10f8. a folder path in the real gocmd table: still refused before any download
+db_cfg yoda analysis
+: > "${FAKE_GOCMD_LOG}"
+touch "${ROOT}/state/refresh-requested"; FAKE_GOCMD_LS_FORMAT=table "${TMP}/ddp-refresh.sh" || true
+check "db gocmd table folder: says not found" message_has "The analysis database was not found at analysis in the study folder."
+check "db gocmd table folder: nothing fetched" bash -c "! grep -q ' get ' '${FAKE_GOCMD_LOG}'"
 
 # 10g. warm-up failing in database mode: done, but no file count from the inbox
 db_cfg yoda analysis/analysis.sqlite
