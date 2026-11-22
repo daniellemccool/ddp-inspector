@@ -4,7 +4,13 @@
 // pairs pin exactly what comes out.
 $cases = [
   '<div>One.</div><div>Two.</div>' => '<p>One.</p><p>Two.</p>',
-  '<!--block--><div>A<br><br></div>' => '<p>A<br><br></p>',
+  // Next's editor ends blocks with blank lines for spacing; here paragraphs
+  // space themselves, so line breaks at a paragraph's end go, and so does a
+  // paragraph left empty. Breaks inside the text stay.
+  '<!--block--><div>A<br><br></div>' => '<p>A</p>',
+  '<div>a<br>b<br /></div>' => '<p>a<br>b</p>',
+  '<div><br></div><div>x</div><div> &nbsp;<br> </div>' => '<p>x</p>',
+  '<div><strong>a</strong><br><br></div><ul><li>b<br></li></ul>' => '<p><strong>a</strong></p><ul><li>b<br></li></ul>',
   '<h1><strong>Title</strong></h1>' => '<h4><strong>Title</strong></h4>',
   '<p onclick="x()" class="c">hi</p>' => '<p>hi</p>',
   '<script>alert(1)</script><p>ok</p><style>p{}</style>' => '<p>ok</p>',

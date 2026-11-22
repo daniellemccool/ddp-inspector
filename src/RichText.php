@@ -46,7 +46,18 @@ function rich_html(string $html): string {
     $open = [];        // written tags still open, innermost last
     $skipping = null;  // inside <script> or <style>: drop everything up to its end
     $closeTo = function (int $depth) use (&$out, &$open): void {
-        while (count($open) > $depth) { $out .= '</' . array_pop($open) . '>'; }
+        while (count($open) > $depth) {
+            $tag = array_pop($open);
+            if ($tag === 'p') {
+                // Next's editor ends a block with blank lines for spacing. On
+                // the page paragraphs space themselves, so line breaks at a
+                // paragraph's end are dropped, and a paragraph left with
+                // nothing in it is not written at all.
+                $out = (string)preg_replace('~(?:<br>|\s|&nbsp;)+\z~', '', $out);
+                if (str_ends_with($out, '<p>')) { $out = substr($out, 0, -3); continue; }
+            }
+            $out .= "</$tag>";
+        }
     };
     foreach ($parts as $i => $part) {
         if ($i % 2 === 0) {

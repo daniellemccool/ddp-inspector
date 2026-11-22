@@ -30,6 +30,7 @@ check(preg_match('~assets/tokens\.css\?v=\d+">\s*<link rel="stylesheet" href="as
 check(str_contains($html, '<li class="site-nav__item is-active"><a href="index.php" aria-current="true">Participants</a></li>'),
       'header marks Participants as the current section');
 check(!str_contains($html, 'setup.php'), 'dev-mode header has no Settings link');
+check(!str_contains($html, 'study.php'), 'dev-mode header has no Study link');
 // The title band: the page's one <h1> sits in it, before the page's own content.
 check(preg_match('~<div class="band">.*<h1>Participants</h1>.*</div>\s*<div class="wrap">~s', $html) === 1
       && substr_count($html, '<h1') === 1, 'the page title is in the band, once');

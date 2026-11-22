@@ -299,3 +299,87 @@ function setup_asset_type(string $name): array {
     return isset($types[$ext]) ? ['type' => $types[$ext], 'inline' => true]
                                : ['type' => 'application/octet-stream', 'inline' => false];
 }
+
+// --- reading the study setup for the Study page -----------------------------
+// next-metadata.json and the crate come from an upload: any field may be
+// missing or of the wrong type. Everything below reads through these.
+
+/** A text field: the trimmed string, '' for anything that is not a string. */
+function setup_text(mixed $v): string {
+    return is_string($v) ? trim($v) : '';
+}
+
+/** A list field: its array members, in order; [] for anything else. */
+function setup_list(mixed $v): array {
+    return is_array($v) ? array_values(array_filter($v, 'is_array')) : [];
+}
+
+/** A file reference from the metadata ("assets/<name>") as the stored file's
+ *  name, or null when it is not of that form or that file is not stored. */
+function setup_ref(mixed $ref, array $assets): ?string {
+    if (!is_string($ref) || !str_starts_with($ref, 'assets/')) { return null; }
+    $name = substr($ref, 7);
+    return setup_asset_name_ok($name) && in_array($name, $assets, true) ? $name : null;
+}
+
+/** A web address a page may link to (http or https, nothing odd in it), or null. */
+function setup_web_url(mixed $v): ?string {
+    $u = setup_text($v);
+    return preg_match('~^https?://[^\s"<>\x00-\x1f\x7f]+\z~i', $u) === 1 ? $u : null;
+}
+
+/**
+ * The facts about a study setup for the Study page's overview, from the
+ * metadata and the crate's root Dataset ("./") with the entities its author,
+ * license and publisher references point at. Missing parts are '', [] or null.
+ * @return array{name:string, public_title:string, subtitle:string, language:string,
+ *   authors:list<array{name:string, email:string}>, study_number:?int, exported_at:string,
+ *   license:?array{name:string, url:string}, publisher:?array{name:string, url:string},
+ *   logo:?string, format_version:int}
+ */
+function setup_overview(array $setup): array {
+    $meta = $setup['meta'];
+    $assignment = is_array($meta['assignment'] ?? null) ? $meta['assignment'] : [];
+    $branding = is_array($meta['branding'] ?? null) ? $meta['branding'] : [];
+    $nodes = [];
+    foreach (setup_list($setup['crate']['@graph'] ?? null) as $node) {
+        if (is_string($node['@id'] ?? null)) { $nodes[$node['@id']] = $node; }
+    }
+    $root = $nodes['./'] ?? [];
+    // What a reference ({"@id": …}) points at: [its id, the entity or []].
+    $follow = function (mixed $ref) use ($nodes): array {
+        $id = is_array($ref) && is_string($ref['@id'] ?? null) ? $ref['@id'] : null;
+        return [$id, $id !== null ? ($nodes[$id] ?? []) : []];
+    };
+    $authors = [];
+    foreach (setup_list($root['author'] ?? null) as $ref) {
+        [, $person] = $follow($ref);
+        $name = setup_text($person['name'] ?? null);
+        if ($name === '') { continue; }
+        [$contact] = $follow($person['contactPoint'] ?? null);
+        $email = $contact !== null && str_starts_with($contact, 'mailto:') ? substr($contact, 7) : '';
+        $authors[] = ['name' => $name, 'email' => filter_var($email, FILTER_VALIDATE_EMAIL) !== false ? $email : ''];
+    }
+    // A licence or publisher: its name, and its id as a link when that is a web address.
+    $entity = function (mixed $ref) use ($follow): ?array {
+        [$id, $node] = $follow($ref);
+        $name = setup_text($node['name'] ?? null);
+        return $name === '' ? null : ['name' => $name, 'url' => setup_web_url($id) ?? ''];
+    };
+    $number = is_int($assignment['id'] ?? null) ? $assignment['id'] : null;
+    if ($number === null && preg_match('/^next-assignment-(\d{1,12})$/', setup_text($root['identifier'] ?? null), $m) === 1) { $number = (int)$m[1]; }
+    $language = setup_text($meta['language'] ?? null);
+    return [
+        'name' => setup_text($assignment['name'] ?? null),
+        'public_title' => setup_text($branding['title'] ?? null),
+        'subtitle' => setup_text($branding['subtitle'] ?? null),
+        'language' => $language !== '' ? $language : setup_text($root['inLanguage'] ?? null),
+        'authors' => $authors,
+        'study_number' => $number,
+        'exported_at' => setup_text($root['datePublished'] ?? null),
+        'license' => $entity($root['license'] ?? null),
+        'publisher' => $entity($root['publisher'] ?? null),
+        'logo' => setup_ref($branding['logo'] ?? null, $setup['assets']),
+        'format_version' => is_int($meta['format_version'] ?? null) ? $meta['format_version'] : 1,
+    ];
+}

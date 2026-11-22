@@ -54,7 +54,7 @@ if ($storageMode) { csrf_token(); }
         </form></li>
     </ul>
   <?php else: ?>
-    <p class="meta">Without a study setup, the inspector cannot show the consent, instructions or tasks.</p>
+    <p class="meta">Without a study setup, the Study page has no consent, instructions or tasks.</p>
   <?php endif; ?>
   <form method="post" enctype="multipart/form-data" class="toolbar">
     <?= csrf_field() ?><input type="hidden" name="action" value="upload_setup">
@@ -76,7 +76,7 @@ if ($storageMode) { csrf_token(); }
     <?php endforeach; ?>
     </ul>
   <?php else: ?>
-    <p class="meta">Without a flow, tables keep their raw names and have no descriptions.</p>
+    <p class="meta">Without a flow, tables keep their raw names and have no descriptions, and the Study page has no codebook.</p>
   <?php endif; ?>
   <form method="post" enctype="multipart/form-data" class="toolbar">
     <?= csrf_field() ?><input type="hidden" name="action" value="upload_flow">
