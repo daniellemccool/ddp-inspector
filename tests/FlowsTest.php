@@ -172,3 +172,11 @@ check(!is_file($travMarkerRel), 'relative traversal entry never lands outside th
 check(!is_file($travMarkerAbs), 'absolute-path entry never lands outside the flows dir');
 @unlink($travMarkerRel); @unlink($travMarkerAbs);
 }
+
+// Removing a flow: only a plain slug that exists; the whole directory goes.
+check(is_dir("$flowsDir/facebook"), 'the facebook flow is there before removal');
+eq(flows_remove($flowsDir, '../facebook'), false, 'unsafe slug refused');
+eq(flows_remove($flowsDir, 'nosuch'), false, 'unknown flow refused');
+eq(flows_remove($flowsDir, ''), false, 'empty slug refused');
+eq(flows_remove($flowsDir, 'facebook'), true, 'flow removed');
+check(!is_dir("$flowsDir/facebook"), 'flow directory gone');

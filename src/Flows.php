@@ -82,13 +82,13 @@ function flows_slug_from_build_name(string $name): ?string {
 /** @return array{ok:bool, message:string, slug:?string, table_count:?int} */
 function flows_ingest_upload(string $zipPath, string $flowsDir): array {
     $fail = fn(string $msg) => ['ok' => false, 'message' => $msg, 'slug' => null, 'table_count' => null];
-    if (!is_file($zipPath)) { return $fail('No file arrived — please choose the zip you downloaded from the flow builder and try again.'); }
+    if (!is_file($zipPath)) { return $fail('No file arrived — please choose the zip you downloaded from the script selector and try again.'); }
     if (filesize($zipPath) > 64 * 1024 * 1024) { return $fail('That file is larger than 64 MB — flow exports are much smaller. Is it the right zip?'); }
     $reading = $zipPath;
     if (!preg_match('/\.zip$/i', $zipPath)) { $reading = $zipPath . '.zip'; if (!@copy($zipPath, $reading)) { return $fail('Could not read the uploaded file — please try again.'); } }
     try {
         try { $phar = new PharData($reading); } catch (Throwable) {
-            return $fail("That doesn't look like a flow export zip. Upload the zip exactly as downloaded from the flow builder.");
+            return $fail("That doesn't look like a flow export zip. Upload the zip exactly as downloaded from the script selector.");
         }
         $entries = []; $n = 0;
         foreach (new RecursiveIteratorIterator($phar) as $file) {
@@ -103,7 +103,7 @@ function flows_ingest_upload(string $zipPath, string $flowsDir): array {
         }
         if (!isset($entries['documentation.txt'])) { return $fail("The zip is missing its documentation file (documentation.txt) — upload the export exactly as downloaded."); }
         if ($entries['documentation.txt']->getSize() > 4 * 1024 * 1024) {
-            return $fail("That file doesn't look like a flow export from the flow builder — the documentation inside it is unexpectedly large.");
+            return $fail("That file doesn't look like a flow export from the script selector — the documentation inside it is unexpectedly large.");
         }
         $builds = array_values(array_filter(array_keys($entries), fn($e) => preg_match('/^build_.*\.zip$/', $e)));
         if (count($builds) !== 1) { return $fail('The zip should contain exactly one build_… .zip file — upload the export exactly as downloaded.'); }
@@ -126,4 +126,14 @@ function flows_ingest_upload(string $zipPath, string $flowsDir): array {
     } finally {
         if ($reading !== $zipPath) { @unlink($reading); }
     }
+}
+
+/** Remove an uploaded flow. Only a plain platform slug that exists: the name
+ *  comes from a form, and the directory under it is deleted whole. */
+function flows_remove(string $flowsDir, string $slug): bool {
+    if (preg_match('/^[a-z0-9]+$/', $slug) !== 1) { return false; }
+    $dir = rtrim($flowsDir, '/') . '/' . $slug;
+    if (!is_dir($dir)) { return false; }
+    foreach (glob("$dir/{,.}[!.]*", GLOB_BRACE) ?: [] as $f) { if (is_file($f)) { @unlink($f); } }
+    return @rmdir($dir);
 }

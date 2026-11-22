@@ -312,6 +312,13 @@ function inst_handle_setup_post(array $post, array $files): array {
         $r = flows_ingest_upload($f['tmp_name'], $flows);
         return $flash($r['ok'] ? 'ok' : 'error', $r['message']);
     }
+    if ($action === 'remove_flow') {
+        $flows = inst_paths()['flows'];
+        $slug = (string)($post['slug'] ?? '');
+        $title = (string)(flows_load_all()[$slug]['platform_title'] ?? $slug);
+        if ($flows === null || !flows_remove($flows, $slug)) { return $flash('error', 'That flow is not here any more.'); }
+        return $flash('ok', "Removed the $title flow — upload it again to restore it.");
+    }
     $cantSave = 'Could not save — the storage volume may be full or read-only.';
     // The study name and the daily check each have their own small form: one
     // key merged into whatever is saved, so neither needs a source to exist.

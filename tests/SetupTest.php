@@ -172,4 +172,12 @@ check(str_contains($html, 'TikTok'), 'uploaded flow listed');
 check(str_contains($html, 'did not accept your username'), 'status message rendered');
 check(str_contains($html, 'Technical log'), 'log details present');
 
+// A flow uploaded by mistake can be removed; the message names what went.
+$r = inst_handle_setup_post(['action' => 'remove_flow', 'csrf' => csrf_token(), 'slug' => 'tiktok'], []);
+eq($r['flash'][0]['kind'], 'ok', 'flow removal accepted');
+check(str_contains($r['flash'][0]['text'], 'TikTok'), 'removal message names the platform');
+eq(flows_load_all(), [], 'no flows left');
+$r = inst_handle_setup_post(['action' => 'remove_flow', 'csrf' => csrf_token(), 'slug' => 'tiktok'], []);
+eq($r['flash'][0]['kind'], 'error', 'removing a flow twice is an error');
+
 $GLOBALS['__cfg'] = $GLOBALS['__cfg_saved_setup'];
