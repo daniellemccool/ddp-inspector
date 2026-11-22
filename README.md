@@ -17,8 +17,7 @@ Two ways to run it:
 An analyses seam lets per-row modules (e.g. the bundled transcripts module) attach
 extra content to table rows without touching the core render path.
 
-Companion to the `ddp-transcribe` pipeline; **not** part of it. See the design spec
-in `docs/superpowers/specs/` and the plan in `docs/superpowers/plans/`.
+Companion to the `ddp-transcribe` pipeline; **not** part of it.
 
 Requires **PHP ≥ 8.1** (uses `array_is_list`).
 

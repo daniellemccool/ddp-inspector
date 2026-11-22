@@ -133,5 +133,4 @@ Behind the proxy, an authenticated request to `https://<hostname>.<co>.src.surf-
 - `deploy/nginx-location.conf.example` — the nginx block above.
 - `deploy/PROVISION.md` — local + workspace provisioning notes.
 - `config.php.example` — the config keys.
-- `docs/superpowers/specs/2026-07-08-ddp-inspector-design.md` — full design + rationale.
 - `README.md` — what it is, how to run, the PHP ≥ 8.1 requirement.
