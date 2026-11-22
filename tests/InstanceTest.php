@@ -83,7 +83,9 @@ inst_save(['study_name' => 'Pilot', 'source_mode' => 'local', 'local_path' => $e
            'cadence' => 'off', 'default_n' => 15]);
 $probe = inst_probe();
 eq($probe['ok'], true, 'local probe ok on a study folder with an export');
-check(str_contains($probe['message'], 'export'), 'local probe mentions the export');
+// On screen the donations are never an "export": that word is the study setup's.
+check(str_contains($probe['message'], 'donations zip'), 'local probe mentions the donations zip');
+check(stripos($probe['message'], 'export') === false, 'local probe does not call the donations an export');
 
 inst_save(['study_name' => 'Pilot', 'source_mode' => 'local', 'local_path' => '/nonexistent/nope',
            'cadence' => 'off', 'default_n' => 15]);

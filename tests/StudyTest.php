@@ -32,7 +32,7 @@ eq(study_db_decl(), ['path' => 'x.sqlite'], 'enabled declaration returns path');
 eq(study_db_file(), $dbfile, 'storage-mode file location');
 eq(study_db_status(), 'missing', 'declared, no file -> missing');
 eq(study_mode(), 'raw', 'mode raw when missing');
-eq(study_db_notice(), "The analysis database hasn't been fetched yet — run Check & fetch in Settings.", 'missing notice');
+eq(study_db_notice(), "The analysis database hasn't been fetched yet — fetch it under “Fetch” in Settings.", 'missing notice');
 eq(study_db(), null, 'no connection when missing');
 
 touch($dbfile);

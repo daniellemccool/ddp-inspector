@@ -206,7 +206,7 @@ function inst_probe(): array {
                 $dir .= '/inbox';
             } elseif ((glob("$dir/donations/*.zip") ?: []) !== []) {
                 return ['ok' => true, 'count' => null,
-                        'message' => 'Found the donations export ✓ — it is unpacked when you fetch.'];
+                        'message' => 'Found the donations zip ✓ — it is unpacked when you fetch.'];
             }
         }
         $n = count(glob("$dir/*.json") ?: []);

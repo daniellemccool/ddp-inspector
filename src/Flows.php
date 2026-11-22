@@ -83,16 +83,16 @@ function flows_slug_from_build_name(string $name): ?string {
 function flows_ingest_upload(string $zipPath, string $flowsDir): array {
     $fail = fn(string $msg) => ['ok' => false, 'message' => $msg, 'slug' => null, 'table_count' => null];
     if (!is_file($zipPath)) { return $fail('No file arrived — please choose the zip you downloaded from the script selector and try again.'); }
-    if (filesize($zipPath) > 64 * 1024 * 1024) { return $fail('That file is larger than 64 MB — flow exports are much smaller. Is it the right zip?'); }
+    if (filesize($zipPath) > 64 * 1024 * 1024) { return $fail('That file is larger than 64 MB — donation flows are much smaller. Is it the right zip?'); }
     $reading = $zipPath;
     if (!preg_match('/\.zip$/i', $zipPath)) { $reading = $zipPath . '.zip'; if (!@copy($zipPath, $reading)) { return $fail('Could not read the uploaded file — please try again.'); } }
     try {
         try { $phar = new PharData($reading); } catch (Throwable) {
-            return $fail("That doesn't look like a flow export zip. Upload the zip exactly as downloaded from the script selector.");
+            return $fail("That doesn't look like a donation flow. Upload the zip exactly as downloaded from the script selector.");
         }
         $entries = []; $n = 0;
         foreach (new RecursiveIteratorIterator($phar) as $file) {
-            if (++$n > 64) { return $fail('That zip contains too many files to be a flow export.'); }
+            if (++$n > 64) { return $fail('That zip contains too many files to be a donation flow.'); }
             $rel = substr($file->getPathname(), strpos($file->getPathname(), '.zip') + 5);
             // Defense-in-depth: PharData's iterator already drops entries containing '..'
             // or a leading '/' from crafted zips, and nothing below writes attacker-named
@@ -101,17 +101,17 @@ function flows_ingest_upload(string $zipPath, string $flowsDir): array {
             if (str_contains($rel, '..') || str_starts_with($rel, '/')) { return $fail('That zip contains unsafe file paths and was not accepted.'); }
             $entries[$rel] = $file;
         }
-        if (!isset($entries['documentation.txt'])) { return $fail("The zip is missing its documentation file (documentation.txt) — upload the export exactly as downloaded."); }
+        if (!isset($entries['documentation.txt'])) { return $fail("The zip is missing its documentation file (documentation.txt) — upload the zip exactly as downloaded."); }
         if ($entries['documentation.txt']->getSize() > 4 * 1024 * 1024) {
-            return $fail("That file doesn't look like a flow export from the script selector — the documentation inside it is unexpectedly large.");
+            return $fail("That file doesn't look like a donation flow from the script selector — the documentation inside it is unexpectedly large.");
         }
         $builds = array_values(array_filter(array_keys($entries), fn($e) => preg_match('/^build_.*\.zip$/', $e)));
-        if (count($builds) !== 1) { return $fail('The zip should contain exactly one build_… .zip file — upload the export exactly as downloaded.'); }
+        if (count($builds) !== 1) { return $fail('The zip should contain exactly one build_… .zip file — upload the zip exactly as downloaded.'); }
         $slug = flows_slug_from_build_name($builds[0]);
         if ($slug === null) { return $fail('Could not tell which platform this flow is for — the inner build file has an unexpected name.'); }
         $docText = (string)file_get_contents($entries['documentation.txt']->getPathname());
         $doc = flows_parse_doc($docText);
-        if ($doc === null) { return $fail('The documentation file inside the zip could not be read — upload the export exactly as downloaded.'); }
+        if ($doc === null) { return $fail('The documentation file inside the zip could not be read — upload the zip exactly as downloaded.'); }
         $dest = rtrim($flowsDir, '/') . '/' . $slug;
         if (is_dir($dest)) { foreach (glob("$dest/*") ?: [] as $old) { @unlink($old); } }
         elseif (!@mkdir($dest, 0755, true)) { return $fail('Could not save the flow — the storage volume may be full or read-only.'); }

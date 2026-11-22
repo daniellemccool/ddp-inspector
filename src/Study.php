@@ -115,7 +115,7 @@ function study_db_unusable(): bool {
 
 function study_db_notice(): ?string {
     switch (study_db_status()) {
-        case 'missing': return "The analysis database hasn't been fetched yet — run Check & fetch in Settings.";
+        case 'missing': return "The analysis database hasn't been fetched yet — fetch it under “Fetch” in Settings.";
         case 'invalid': return "The analysis database doesn't look like a pipeline analysis database.";
         default: return null;
     }

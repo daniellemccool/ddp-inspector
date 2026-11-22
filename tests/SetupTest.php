@@ -192,4 +192,17 @@ eq(flows_load_all(), [], 'no flows left');
 $r = inst_handle_setup_post(['action' => 'remove_flow', 'csrf' => csrf_token(), 'slug' => 'tiktok'], []);
 eq($r['flash'][0]['kind'], 'error', 'removing a flow twice is an error');
 
+// An instance.json written by the old Setup (every key it ever wrote) keeps
+// all of it when only the name or only the daily check is saved: a save
+// that wrote just its own key would unconfigure a live workspace.
+$oldStyle = ['study_name' => 'Old', 'source_mode' => 'yoda', 'local_path' => null, 'cadence' => 'daily',
+    'default_n' => 20, 'analysis_dirs' => ['transcripts' => 'transcripts'],
+    'analyses' => ['database' => ['enabled' => true, 'path' => 'a/b.sqlite']]];
+inst_save($oldStyle);
+inst_handle_setup_post(['action' => 'save_name', 'csrf' => csrf_token(), 'study_name' => 'New'], []);
+check(inst_load() == ['study_name' => 'New'] + $oldStyle, 'saving the name changes nothing else');
+inst_handle_setup_post(['action' => 'save_cadence', 'csrf' => csrf_token()], []);
+check(inst_load() == ['study_name' => 'New', 'cadence' => 'off'] + $oldStyle, 'saving the daily check changes nothing else');
+check(inst_configured(), 'the instance is still configured after both');
+
 $GLOBALS['__cfg'] = $GLOBALS['__cfg_saved_setup'];
