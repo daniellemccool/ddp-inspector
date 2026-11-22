@@ -16,7 +16,9 @@
    notice sits on a short line between two nodes, a problem carries the coral
    exclamation disc, and the setup steps hang on one line, numbered in discs.
    A quiet action (remove, save one tick box) is the site's text link, and
-   "optional" after a heading is the eyebrow. The study page sets the
+   "optional" after a heading is the eyebrow. The parts of the first setup
+   step are lines that open, each hanging on the step's line by a node: a
+   disc when the thing is there, a ring when it is not. The study page sets the
    researcher's own texts in the body type and numbers the tasks in the
    steps' numeral. */
 
@@ -295,9 +297,41 @@ input[type=radio], input[type=checkbox] { flex:none; width:16px; height:16px; ma
    voice, after its heading; where a part comes from, in the small text. */
 .optional { margin-left:var(--space-12); font:var(--text-eyebrow); letter-spacing:.12em; text-transform:uppercase;
             color:var(--text-muted); white-space:nowrap; }
-.part__from { margin-left:var(--space-4); font:var(--text-small); color:var(--text-muted); }
-.part__from a { font-weight:400; }
-.step > form > .field:first-of-type { margin-top:var(--space-12); }
+/* The first step's parts: one line each (name, status, one word), opening
+   to the explanation and controls. The node sits on the step's line. */
+.parts { max-width:52rem; margin:var(--space-16) 0 0; border-top:1px solid var(--border); }
+.part { position:relative; border-bottom:1px solid var(--border); scroll-margin-top:5rem; }
+.part::before { content:""; position:absolute; top:calc(12px + .8em - var(--node-edge) / 2);
+                left:calc(24px - 72px - var(--node-edge) / 2); width:var(--node-edge); height:var(--node-edge);
+                border-radius:var(--radius-circle); background:var(--blue); }
+.part--off::before { top:calc(12px + .8em - var(--node-ring) / 2); left:calc(24px - 72px - var(--node-ring) / 2);
+                     width:var(--node-ring); height:var(--node-ring); background:var(--surface);
+                     border:1.4px solid var(--blue); }
+.part > summary { display:flex; flex-wrap:wrap; align-items:baseline; gap:var(--space-4) var(--space-16);
+                  padding:12px 0; list-style:none; font:var(--text-body); color:var(--text); }
+.part > summary::-webkit-details-marker { display:none; }
+.part__name { flex:none; width:9.5rem; font-weight:700; color:var(--heading); }
+.part__status { flex:1 1 14rem; min-width:0; overflow-wrap:anywhere; }
+.part--off .part__status { color:var(--text-muted); }
+.part__when { margin-left:var(--space-4); font:var(--text-small); color:var(--text-muted); }
+/* The word at the line's end is a quiet action; only the one that fits shows. */
+.part__word { display:none; flex:none; margin-left:auto; font:var(--text-small); font-weight:700; color:var(--text-muted);
+              text-decoration:underline dotted var(--sky); text-decoration-thickness:var(--line-underline);
+              text-underline-offset:var(--line-underline-offset); }
+.part--off:not([open]) .part__word--add, .part--on:not([open]) .part__word--change,
+.part[open] .part__word--close { display:inline; }
+.part > summary:hover .part__word, .part > summary:focus-visible .part__word { color:var(--heading); text-decoration-style:solid; }
+.part__body { margin:0 0 var(--space-16) calc(9.5rem + var(--space-16)); }
+.part__body > p { margin:0 0 var(--space-4); }
+.part__body > .notice, .part__body > .warn { margin:0 0 var(--space-12); }
+.part__body .flows { margin:var(--space-12) 0; }
+.part__body .toolbar { margin:var(--space-12) 0 0; }
+.part__body .field { flex:1 1 14rem; margin:0; }
+@media (max-width:719px) { .part__body { margin-left:0; } }
+@media (max-width:599px) {
+  .part::before { left:calc(18px - 52px - var(--node-edge) / 2); }
+  .part--off::before { left:calc(18px - 52px - var(--node-ring) / 2); }
+}
 .step p.meta { max-width:44rem; }
 @media (max-width:599px) {
   .steps::before { left:calc(18px - .75px); top:18px; }
