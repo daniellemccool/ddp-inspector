@@ -112,6 +112,7 @@ check(isset($meta['uploaded_at']), 'build-meta timestamp present');
 $bad = "$tmpdir/notazip.zip"; file_put_contents($bad, 'not a zip at all');
 $r = flows_ingest_upload($bad, $flowsDir);
 eq($r['ok'], false, 'garbage rejected');
+check(stripos($r['message'], 'export') === false, 'a rejected flow is not called an export (that word is the study setup\'s)');
 check(!str_contains($r['message'], 'Phar'), 'rejection message plain-language');
 
 $noDoc = "$tmpdir/nodoc.zip";
@@ -120,6 +121,7 @@ $phar->addFromString('build_x_y_tiktok_development_2026-01-01_00-00-00.zip', 'x'
 unset($phar);
 $r = flows_ingest_upload($noDoc, $flowsDir);
 eq($r['ok'], false, 'missing documentation rejected');
+check(stripos($r['message'], 'export') === false, 'a flow without documentation is not called an export');
 check(str_contains($r['message'], 'documentation'), 'missing-doc message names the problem');
 
 // Temp-copy cleanup: an upload without a .zip suffix gets copied to "<path>.zip" so
@@ -172,3 +174,11 @@ check(!is_file($travMarkerRel), 'relative traversal entry never lands outside th
 check(!is_file($travMarkerAbs), 'absolute-path entry never lands outside the flows dir');
 @unlink($travMarkerRel); @unlink($travMarkerAbs);
 }
+
+// Removing a flow: only a plain slug that exists; the whole directory goes.
+check(is_dir("$flowsDir/facebook"), 'the facebook flow is there before removal');
+eq(flows_remove($flowsDir, '../facebook'), false, 'unsafe slug refused');
+eq(flows_remove($flowsDir, 'nosuch'), false, 'unknown flow refused');
+eq(flows_remove($flowsDir, ''), false, 'empty slug refused');
+eq(flows_remove($flowsDir, 'facebook'), true, 'flow removed');
+check(!is_dir("$flowsDir/facebook"), 'flow directory gone');

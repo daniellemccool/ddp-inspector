@@ -194,6 +194,29 @@ touch "${ROOT}/state/refresh-requested"
 check "unconfigured+flag: exits 0"           "${TMP}/ddp-refresh.sh"
 check "unconfigured+flag: flag consumed"     bash -c "! test -e '${ROOT}/state/refresh-requested'"
 
+# ---- 1c. instance without a source: named or described, donations not connected
+# Setup saves the study name (and a study setup) on its own, so instance.json
+# can exist before "Connect your donations" is filled in. A timer tick then
+# does nothing; a requested run says which part of Setup is missing.
+cat > "${ROOT}/config/instance.json" <<'J'
+{"study_name":"example"}
+J
+check "no source, no flag: exits 0"          "${TMP}/ddp-refresh.sh"
+check "no source, no flag: no status written" bash -c "! test -e '${ROOT}/state/refresh-status.json'"
+# The daily check can be switched on before a source exists: a timer tick
+# must still do nothing, not fail the unit every day.
+cat > "${ROOT}/config/instance.json" <<'J'
+{"study_name":"example","cadence":"daily"}
+J
+check "no source, daily tick: exits 0"       "${TMP}/ddp-refresh.sh"
+check "no source, daily tick: no status written" bash -c "! test -e '${ROOT}/state/refresh-status.json'"
+touch "${ROOT}/state/refresh-requested"
+"${TMP}/ddp-refresh.sh" || true
+check "no source + flag: phase error"        bash -c "[ \"\$(jq -r .phase '${ROOT}/state/refresh-status.json')\" = error ]"
+check "no source + flag: names the step"     bash -c "jq -r .message '${ROOT}/state/refresh-status.json' | grep -q 'Connect your donations'"
+check "no source + flag: flag consumed"      bash -c "! test -e '${ROOT}/state/refresh-requested'"
+rm -f "${ROOT}/state/refresh-status.json"
+
 # ---- 2. yoda happy path -------------------------------------------------------
 cat > "${ROOT}/config/instance.json" <<'J'
 {"study_name":"example","source_mode":"yoda","local_path":null,"cadence":"off","default_n":15}
@@ -310,7 +333,8 @@ rm -f "${FAKE_REMOTE}/coll/donations"/*.zip
 touch "${ROOT}/state/refresh-requested"
 "${TMP}/ddp-refresh.sh" || true
 check "export missing zip: phase error"      bash -c "[ \"\$(jq -r .phase '${ROOT}/state/refresh-status.json')\" = error ]"
-check "export missing zip: says export"      bash -c "jq -r .message '${ROOT}/state/refresh-status.json' | grep -qi 'export'"
+check "export missing zip: says donations zip" bash -c "jq -r .message '${ROOT}/state/refresh-status.json' | grep -q 'donations zip'"
+check "export missing zip: never says export"  bash -c "! jq -r .message '${ROOT}/state/refresh-status.json' | grep -qi 'export'"
 
 # ---- 4e. neither inbox/ nor donations/: plain-language error --------------------
 rm -rf "${FAKE_REMOTE}/coll/donations"
@@ -382,7 +406,8 @@ export FAKE_RD="${TMP}/rd-study-noexport"; mkdir -p "${FAKE_RD}/donations"
 touch "${ROOT}/state/refresh-requested"
 "${TMP}/ddp-refresh.sh" || true
 check "rd-link no export: phase error"       bash -c "[ \"\$(jq -r .phase '${ROOT}/state/refresh-status.json')\" = error ]"
-check "rd-link no export: says export"       bash -c "jq -r .message '${ROOT}/state/refresh-status.json' | grep -qi 'export'"
+check "rd-link no export: says donations zip" bash -c "jq -r .message '${ROOT}/state/refresh-status.json' | grep -q 'donations zip'"
+check "rd-link no export: never says export"  bash -c "! jq -r .message '${ROOT}/state/refresh-status.json' | grep -qi 'export'"
 
 # ---- 6e. rd-link share with no donations anywhere: plain-language error --------
 export FAKE_RD="${TMP}/rd-study-empty"; mkdir -p "${FAKE_RD}/analysis"; echo x > "${FAKE_RD}/README.txt"
@@ -504,7 +529,8 @@ check "probe local root json counts"         bash -c "'${TMP}/ddp-probe.sh' loca
 local_cfg "${LSTUDY}"
 check "probe local inbox/ counts"            bash -c "'${TMP}/ddp-probe.sh' local | grep -q '(1 donation files)'"
 local_cfg "${LZIP}"
-check "probe local export mentioned"         bash -c "'${TMP}/ddp-probe.sh' local | grep -qi 'export'"
+check "probe local donations zip mentioned"  bash -c "'${TMP}/ddp-probe.sh' local | grep -q 'donations zip'"
+check "probe local never says export"        bash -c "! '${TMP}/ddp-probe.sh' local | grep -qi 'export'"
 local_cfg "${TMP}/no-such-folder"
 check "probe local missing fails"            bash -c "! '${TMP}/ddp-probe.sh' local"
 

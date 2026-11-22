@@ -19,6 +19,13 @@ check(str_contains($r['flash'][0]['text'], 'TikTok'), 'upload confirmation names
 
 // Yoda: the researcher's own configuration (pasted or uploaded, JSON or the
 // GoCommands YAML, exactly as the Yoda portal offers it) + data access password.
+// The study name is saved on its own, before any source exists; a name alone
+// does not make the instance configured.
+$r = inst_handle_setup_post(['action' => 'save_name', 'csrf' => csrf_token(), 'study_name' => '  Example study  '], []);
+eq($r['flash'][0]['kind'], 'ok', 'study name saved on its own');
+eq(inst_load()['study_name'], 'Example study', 'study name trimmed and stored');
+eq(inst_configured(), false, 'a name alone does not make the instance configured');
+
 $cfgJson = '{"irods_host": "lp0555.its.uu.nl", "irods_port": 1247, "irods_home": "/nluu10p/home",'
     . ' "irods_user_name": "r@uu.nl", "irods_zone_name": "nluu10p", "irods_default_resource": "irodsResc",'
     . ' "irods_authentication_scheme": "pam_password", "irods_encryption_algorithm": "AES-256-CBC",'
@@ -32,6 +39,11 @@ eq(inst_source_load()['password'], 'DAP123', 'data access password stored');
 eq(inst_source_load()['env']['irods_host'] ?? null, 'lp0555.its.uu.nl', 'pasted config stored as-is (host)');
 eq(inst_source_load()['env']['irods_default_resource'] ?? null, 'irodsResc', 'pasted config stored as-is (resource)');
 check(!isset(inst_source_load()['env']['irods_user_password']), 'no password inside the stored config');
+eq(inst_load()['study_name'], 'Example study', 'saving the source keeps the study name');
+$r = inst_handle_setup_post(['action' => 'save_cadence', 'csrf' => csrf_token(), 'cadence' => 'daily'], []);
+eq($r['flash'][0]['kind'], 'ok', 'daily check saved on its own');
+eq(inst_load()['cadence'], 'daily', 'daily check stored');
+eq(inst_load()['source_mode'], 'yoda', 'saving the daily check keeps the source');
 
 // The page shows the saved configuration (not secret) but never the DAP.
 $_POST = [];
@@ -39,13 +51,15 @@ $html = render_page('setup.php', []);
 check(str_contains($html, 'r@uu.nl'), 'saved configuration shown in the paste box');
 check(!str_contains($html, 'DAP123'), 'data access password never echoed');
 
-// Re-saving "About your study" (e.g. a new study name) with the config box
-// and password left blank keeps both — the password field shows "saved ✓".
+// Re-saving "Connect your donations" with the config box and password left
+// blank keeps both — the password field shows "saved ✓". The form no longer
+// holds the study name or the daily check: both keep their saved values.
 $r = inst_handle_setup_post(['action' => 'save_source', 'csrf' => csrf_token(),
-    'source_mode' => 'yoda', 'study_name' => 'Example study (renamed)',
+    'source_mode' => 'yoda', 'study_name' => 'IGNORED',
     'collection' => '/nluu10p/home/research-x', 'irods_config' => '', 'yoda_password' => ''], []);
 eq($r['flash'][0]['kind'], 'ok', 'yoda re-save with blank config and password accepted');
-eq(inst_load()['study_name'], 'Example study (renamed)', 'study name updated on re-save');
+eq(inst_load()['study_name'], 'Example study', 'save_source ignores a posted study name');
+eq(inst_load()['cadence'], 'daily', 'saving the source keeps the daily check');
 eq(inst_source_load()['password'], 'DAP123', 'blank password keeps the saved DAP');
 eq(inst_source_load()['env']['irods_user_name'] ?? null, 'r@uu.nl', 'blank config box keeps the saved config');
 
@@ -142,6 +156,11 @@ check(is_file("$scratch2/state/refresh-requested"), 'refresh flag touched by han
 $r = inst_handle_setup_post(['action' => 'refresh_now', 'csrf' => 'nope'], []);
 eq($r['flash'][0]['kind'], 'error', 'bad csrf rejected');
 
+// An unticked daily-check box posts no "cadence" at all: that switches it off.
+$r = inst_handle_setup_post(['action' => 'save_cadence', 'csrf' => csrf_token()], []);
+eq(inst_load()['cadence'], 'off', 'daily check switched off');
+eq(inst_load()['source_mode'], 'local', 'switching the daily check off keeps the source');
+
 // Page renders: no secret echo, flows listed, status shown.
 inst_write_json_atomic("$scratch2/state/refresh-status.json",
     ['phase' => 'error', 'started_at' => null, 'finished_at' => null, 'donations' => null,
@@ -152,5 +171,38 @@ check(!str_contains($html, '>pw<'), 'password never echoed');
 check(str_contains($html, 'TikTok'), 'uploaded flow listed');
 check(str_contains($html, 'did not accept your username'), 'status message rendered');
 check(str_contains($html, 'Technical log'), 'log details present');
+// Three steps that read as one path: describe the study, connect the
+// donations, fetch. The name and the daily check each have their own form.
+$p1 = strpos($html, 'Describe your study'); $p2 = strpos($html, 'Connect your donations'); $p3 = strpos($html, '>03</span> Fetch');
+check($p1 !== false && $p2 !== false && $p3 !== false && $p1 < $p2 && $p2 < $p3, 'three steps in order');
+check(!str_contains($html, 'flow builder'), 'the page says script selector, not flow builder');
+check(str_contains($html, 'href="https://datadonation.eu/software/script-selector/" target="_blank" rel="noopener noreferrer"'), 'script selector linked');
+check(substr_count($html, 'class="optional"') >= 2, 'the step and the flows part are marked optional');
+check(preg_match('~name="action" value="remove_flow">\s*<input type="hidden" name="slug" value="tiktok">~', $html) === 1, 'each flow has a Remove form');
+check(preg_match('~value="save_name">.*name="study_name".*value="save_source">~s', $html) === 1, 'the name has its own form, before the source form');
+check(preg_match('~value="save_source">(?:(?!</form>).)*name="(study_name|cadence)"~s', $html) === 0, 'the source form holds neither name nor daily check');
+check(preg_match('~value="save_cadence">(?:(?!</form>).)*name="cadence"~s', $html) === 1, 'the daily check has its own form');
+check(!str_contains($html, 'Without a flow'), 'no "without a flow" line while a flow is stored');
+
+// A flow uploaded by mistake can be removed; the message names what went.
+$r = inst_handle_setup_post(['action' => 'remove_flow', 'csrf' => csrf_token(), 'slug' => 'tiktok'], []);
+eq($r['flash'][0]['kind'], 'ok', 'flow removal accepted');
+check(str_contains($r['flash'][0]['text'], 'TikTok'), 'removal message names the platform');
+eq(flows_load_all(), [], 'no flows left');
+$r = inst_handle_setup_post(['action' => 'remove_flow', 'csrf' => csrf_token(), 'slug' => 'tiktok'], []);
+eq($r['flash'][0]['kind'], 'error', 'removing a flow twice is an error');
+
+// An instance.json written by the old Setup (every key it ever wrote) keeps
+// all of it when only the name or only the daily check is saved: a save
+// that wrote just its own key would unconfigure a live workspace.
+$oldStyle = ['study_name' => 'Old', 'source_mode' => 'yoda', 'local_path' => null, 'cadence' => 'daily',
+    'default_n' => 20, 'analysis_dirs' => ['transcripts' => 'transcripts'],
+    'analyses' => ['database' => ['enabled' => true, 'path' => 'a/b.sqlite']]];
+inst_save($oldStyle);
+inst_handle_setup_post(['action' => 'save_name', 'csrf' => csrf_token(), 'study_name' => 'New'], []);
+check(inst_load() == ['study_name' => 'New'] + $oldStyle, 'saving the name changes nothing else');
+inst_handle_setup_post(['action' => 'save_cadence', 'csrf' => csrf_token()], []);
+check(inst_load() == ['study_name' => 'New', 'cadence' => 'off'] + $oldStyle, 'saving the daily check changes nothing else');
+check(inst_configured(), 'the instance is still configured after both');
 
 $GLOBALS['__cfg'] = $GLOBALS['__cfg_saved_setup'];

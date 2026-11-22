@@ -2,7 +2,6 @@
 
 The SRC catalog-component half of this repo: one Ansible play that turns a
 workspace (already running SRC-Nginx) into a study-blind DDP Inspector.
-Design: `../docs/superpowers/specs/2026-07-29-ddp-inspector-catalog-component-design.md`.
 Operations: `docs/OPERATIONS.md`.
 
 ## Layout

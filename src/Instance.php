@@ -23,9 +23,15 @@ function inst_effective_ddp_dir(): ?string {
     return (is_string($d) && $d !== '') ? $d : null;
 }
 
+const INST_SOURCE_MODES = ['yoda', 'rd-link', 'local'];
+
+/** Configured = the donations have a source. The study name and the study
+ *  setup can be saved first; they write instance.json without one. */
 function inst_configured(): bool {
     $p = inst_paths();
-    if ($p['config'] !== null) { return is_file($p['config'] . '/instance.json'); }
+    if ($p['config'] !== null) {
+        return in_array(inst_load()['source_mode'] ?? null, INST_SOURCE_MODES, true);
+    }
     return inst_effective_ddp_dir() !== null;
 }
 
@@ -200,14 +206,14 @@ function inst_probe(): array {
                 $dir .= '/inbox';
             } elseif ((glob("$dir/donations/*.zip") ?: []) !== []) {
                 return ['ok' => true, 'count' => null,
-                        'message' => 'Found the donations export ✓ — it is unpacked when you fetch.'];
+                        'message' => 'Found the donations zip ✓ — it is unpacked when you fetch.'];
             }
         }
         $n = count(glob("$dir/*.json") ?: []);
         return ['ok' => true, 'count' => $n, 'message' => "Found $n donation file(s) ✓"];
     }
     $src = inst_source_load();
-    if ($src === null) { return ['ok' => false, 'count' => null, 'message' => 'No connection details saved yet — complete step 2 first.']; }
+    if ($src === null) { return ['ok' => false, 'count' => null, 'message' => 'No connection details saved yet — fill in “Connect your donations” first.']; }
     if ($mode === 'yoda') {
         $bin = (string)cfg('gocmd_bin', 'gocmd');
         if (!inst_which($bin)) {
@@ -216,7 +222,7 @@ function inst_probe(): array {
         }
         if (!is_array($src['env'] ?? null) || (string)($src['password'] ?? '') === '') {
             return ['ok' => false, 'count' => null,
-                    'message' => 'Add your Yoda configuration (upload or paste) and data access password in step 2, then save.'];
+                    'message' => 'Add your Yoda configuration (upload or paste) and data access password under “Connect your donations”, then save.'];
         }
         // gocmd's -c takes a config DIRECTORY holding irods_environment.json;
         // the data access password goes via IRODS_USER_PASSWORD (gocmd
@@ -238,7 +244,7 @@ function inst_probe(): array {
         }
         if (stripos($r['out'], 'authentication failed') !== false) {
             return ['ok' => false, 'count' => null,
-                    'message' => 'Yoda did not accept this username and data access password. Data access passwords expire — create a new one in the Yoda portal and paste it in step 2.'];
+                    'message' => 'Yoda did not accept this username and data access password. Data access passwords expire — create a new one in the Yoda portal and paste it under “Connect your donations”.'];
         }
         if (stripos($r['out'], 'failed to establish a connection') !== false) {
             return ['ok' => false, 'count' => null,
@@ -306,15 +312,39 @@ function inst_handle_setup_post(array $post, array $files): array {
         $r = flows_ingest_upload($f['tmp_name'], $flows);
         return $flash($r['ok'] ? 'ok' : 'error', $r['message']);
     }
+    if ($action === 'remove_flow') {
+        $flows = inst_paths()['flows'];
+        $slug = (string)($post['slug'] ?? '');
+        $title = (string)(flows_load_all()[$slug]['platform_title'] ?? $slug);
+        if ($flows === null || !flows_remove($flows, $slug)) { return $flash('error', 'That flow is not here any more.'); }
+        return $flash('ok', "Removed the $title flow — upload it again to restore it.");
+    }
+    $cantSave = 'Could not save — the storage volume may be full or read-only.';
+    // The study name and the daily check each have their own small form: one
+    // key merged into whatever is saved, so neither needs a source to exist.
+    if ($action === 'save_name') {
+        $inst = inst_load() ?? [];
+        $inst['study_name'] = trim((string)($post['study_name'] ?? ''));
+        return inst_save($inst) ? $flash('ok', 'Saved ✓') : $flash('error', $cantSave);
+    }
+    if ($action === 'save_cadence') {
+        $inst = inst_load() ?? [];
+        $inst['cadence'] = (($post['cadence'] ?? '') === 'daily') ? 'daily' : 'off';
+        if (!inst_save($inst)) { return $flash('error', $cantSave); }
+        return $flash('ok', $inst['cadence'] === 'daily'
+            ? 'Saved ✓ — new donations are checked every day.'
+            : 'Saved ✓ — new donations are not checked automatically.');
+    }
     if ($action === 'save_source') {
         $mode = (string)($post['source_mode'] ?? '');
-        if (!in_array($mode, ['yoda', 'rd-link', 'local'], true)) { return $flash('error', 'Please choose where your donations are stored.'); }
+        if (!in_array($mode, INST_SOURCE_MODES, true)) { return $flash('error', 'Please choose where your donations are stored.'); }
         $inst = inst_load() ?? [];
+        // The name and the daily check are not in this form: keep what is saved.
         $instance = [
-            'study_name'  => trim((string)($post['study_name'] ?? ($inst['study_name'] ?? ''))),
+            'study_name'  => trim((string)($inst['study_name'] ?? '')),
             'source_mode' => $mode,
             'local_path'  => $mode === 'local' ? trim((string)($post['local_path'] ?? '')) : null,
-            'cadence'     => (($post['cadence'] ?? '') === 'daily') ? 'daily' : 'off',
+            'cadence'     => (($inst['cadence'] ?? '') === 'daily') ? 'daily' : 'off',
             'default_n'   => (int)($inst['default_n'] ?? cfg('default_n', 15)),
         ];
         if (isset($inst['analysis_dirs'])) { $instance['analysis_dirs'] = $inst['analysis_dirs']; }
@@ -389,7 +419,7 @@ function inst_handle_setup_post(array $post, array $files): array {
             $c = inst_paths()['config'];
             if ($c !== null && is_file($c . '/source.json')) { @unlink($c . '/source.json'); }
         }
-        return $flash('ok', 'Saved ✓ — now run "Check & fetch" below.');
+        return $flash('ok', 'Saved ✓ — now fetch your donations in step 03.');
     }
     if ($action === 'check_fetch') {
         $probe = inst_probe();

@@ -37,6 +37,11 @@ REQUESTED=0
 [ -e "${FLAG}" ] && REQUESTED=1
 CADENCE="$(jq -r '.cadence // "off"' "${INSTANCE}")"
 if [ "${REQUESTED}" -eq 0 ] && [ "${CADENCE}" != "daily" ]; then exit 0; fi
+# The daily check can be switched on before the donations are connected
+# (Setup saves it on its own). A timer tick then has nothing to fetch: stay
+# quiet rather than fail the unit every day. A requested run still reports
+# what is missing, further down.
+if [ "${REQUESTED}" -eq 0 ] && [ -z "$(jq -r '.source_mode // ""' "${INSTANCE}")" ]; then exit 0; fi
 
 exec 9> "${STATE}/.refresh.lock"
 flock 9
@@ -293,7 +298,7 @@ case "${MODE}" in
           || die "Fetching donations stopped partway. This is usually temporary — try again in a few minutes."
         ZIP="$(newest_zip "${CACHE}/donations")"
         [ -n "${ZIP}" ] \
-          || die "The donations folder on the data store has no export in it yet — ask your data manager to upload the latest export, then try again."
+          || die "The donations folder on the data store has no donations zip in it yet — ask your data manager to upload the latest one, then try again."
         extract_export_zip "${ZIP}"
         rm -rf "${CACHE}/donations"
       else
@@ -361,7 +366,7 @@ case "${MODE}" in
           || die "Fetching donations stopped partway. This is usually temporary — try again in a few minutes."
         ZIP="$(sort <<<"${ZIPS}" | tail -n 1)"
         [ -n "${ZIP}" ] \
-          || die "The donations folder in the share has no export in it yet — ask your data manager to upload the latest export, then try again."
+          || die "The donations folder in the share has no donations zip in it yet — ask your data manager to upload the latest one, then try again."
         rm -rf "${CACHE}/donations"
         "${RCLONE}" copy ":webdav:donations/${ZIP}" "${CACHE}/donations" "${RFLAGS[@]}" \
           || die "Fetching donations stopped partway. This is usually temporary — try again in a few minutes."
@@ -394,7 +399,7 @@ case "${MODE}" in
       elif [ -d "${LOCAL_PATH}/donations" ]; then
         ZIP="$(newest_zip "${LOCAL_PATH}/donations")"
         [ -n "${ZIP}" ] \
-          || die "The donations folder has no export in it yet — ask your data manager to add the latest export, then try again."
+          || die "The donations folder has no donations zip in it yet — ask your data manager to add the latest one, then try again."
         extract_export_zip "${ZIP}"
       else
         die "No donations were found in that folder on this workspace. Check the folder in Setup — it should be the study's folder."
@@ -402,7 +407,7 @@ case "${MODE}" in
     fi
     ;;
   *)
-    die "The study setup looks incomplete — open Setup and finish the 'Where are your donations stored?' step."
+    die "Setup is not finished — open Settings and fill in 'Connect your donations'."
     ;;
 esac
 
