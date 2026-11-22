@@ -128,8 +128,9 @@ foreach ($kinds as $id => $kind) {
     $sc = $screen($id);
     // A label that would only repeat the title (Consent, Privacy statement) is left out.
     $labelPart = $kind === $titles[$id] ? '' : '<p class="screen__kind">' . preg_quote($kind, '~') . '</p>\s*';
-    check(preg_match('~^<section class="screen" id="[^"]+">\s*' . $labelPart . '<h2>' . preg_quote($titles[$id], '~') . '</h2>\s*<div class="screen__frame">~', $sc) === 1, "screen $id: label, title, then the frame");
-    eq(substr_count($sc, 'class="screen__frame"'), 1, "screen $id has one frame");
+    check(preg_match('~^<section class="screen" id="[^"]+">\s*' . $labelPart . '<h2>' . preg_quote($titles[$id], '~') . '</h2>\s*(<div class="screen__frame">|<p class="meta">)~', $sc) === 1, "screen $id: label, title, then the frame");
+    // The two tasks of kinds the app does not know have nothing to show: no frame.
+    eq(substr_count($sc, 'class="screen__frame"'), in_array($id, ['task-5', 'task-6'], true) ? 0 : 1, "screen $id has one frame, or none when there is nothing to show");
 }
 check(str_contains($screen('consent'), '<h4>Consent</h4>') && strpos($screen('consent'), '<h4>Consent</h4>') > strpos($screen('consent'), 'screen__frame'), 'the participant' . "\x27" . 's own heading is inside the frame');
 check(strpos($screen('task-1'), 'guide.pdf') > strpos($screen('task-1'), 'screen__frame'), 'a document' . "\x27" . 's link is inside the frame');
@@ -287,6 +288,31 @@ eq(preg_match_all('~<ol[ >]~', $h2), substr_count($h2, '</ol>'), 'and its ordere
 check(preg_match('~<div class="rich">x</div>~', $h2) === 1, 'the stray tags are gone, the text stays');
 check(!str_contains($html, 'javascript:'), 'a licence that is not a web address is never a link');
 check(str_contains($html, 'Lic'), 'the licence name is still shown');
+
+// --- a frame is never empty; an untitled task still has a name ---------------------
+// The frame means "what the participant saw". A task the setup says nothing
+// more about gets one line in our voice instead of an empty box.
+$storeSetup(['format_version' => 1, 'workflow' => ['tasks' => [
+    ['type' => 'data_donation', 'title' => 'Donate your data'],
+    ['type' => 'questionnaire'],
+    ['type' => 'instruction_manual', 'title' => 'Manual', 'chapters' => []],
+    ['type' => 'some_new_tool', 'title' => 'Later', 'description' => 'Has a description']]]]);
+[$html, $problems] = $renderStudy();
+eq($problems, [], 'bare tasks render without warnings');
+$bare = fn(string $id): string => preg_match('~<section class="screen" id="' . $id . '">.*?</section>~s', $html, $m) === 1 ? $m[0] : '';
+foreach (['task-1', 'task-2', 'task-3'] as $id) {
+    check(!str_contains($bare($id), 'screen__frame') && str_contains($bare($id), 'The study setup records nothing more about this task.'), "$id: no empty frame, one line saying so");
+}
+check(str_contains($bare('task-4'), '<div class="screen__frame">') && !str_contains($bare('task-4'), 'records nothing more'), 'a task with a description keeps its frame');
+check(preg_match('~<div class="screen__frame">\s*</div>~', $html) === 0, 'no frame on the page is empty');
+check(str_contains($bare('task-2'), '<h2>Task 2</h2>') && preg_match('~href="#task-2">Task 2</a>~', $html) === 1, 'an untitled task is named by its number, in its heading and in the contents row');
+// The notices about the study setup belong to the first page only.
+$storeSetup(['format_version' => 2] + $meta, $crate, $assets, '{"skipped":[{"path":"example/assets/big-guide.pdf","reason":"x"}]}');
+$storeFlow(true);
+[$chtml] = $renderStudy('collected');
+check(!str_contains($chtml, 'newer format') && !str_contains($chtml, 'could not include'), 'the study setup notices are not on the second page');
+eq(preg_match_all('~<li[ >]~', $chtml), substr_count($chtml, '</li>'), 'every list item on the second page is closed');
+flows_remove("$spRoot/root/config/flows", 'tiktok');
 
 // --- Setup says what the Study page loses -----------------------------------------
 setup_remove($spDest);

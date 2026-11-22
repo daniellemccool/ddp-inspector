@@ -382,7 +382,7 @@ td.low::before { content:""; display:inline-block; width:var(--node); height:var
 
 /* --- print: it's a reading tool ---------------------------------------- */
 @media print {
-  .site-header, .skip-link, form, .controls, .reshuffle, details, button, .more__dots, .go,
+  .site-header, .subnav, .contents, .skip-link, form, .controls, .reshuffle, details, button, .more__dots, .go,
   .band__lead, .band__thread, .band__deep, .band__step { display:none !important; }
   .band { background:none; }
   .band h1 { margin:0 var(--edge); color:var(--heading); }
@@ -412,8 +412,9 @@ h2[id], h3[id] { scroll-margin-top:5rem; }
 .contents .eyebrow { margin:0 0 var(--space-8); }
 .contents ul { display:flex; flex-wrap:wrap; align-items:center; gap:var(--space-4) 0; margin:0; padding:0;
                list-style:none; font:var(--text-small); }
-.contents li + li::before { content:""; display:inline-block; width:4px; height:4px; margin:0 10px 3px;
-                            border-radius:var(--radius-circle); background:var(--text-muted); }
+/* The dot follows a link, so a wrapped row never starts with one. */
+.contents li:not(:last-child)::after { content:""; display:inline-block; width:4px; height:4px; margin:0 10px 3px;
+                                       border-radius:var(--radius-circle); background:var(--text-muted); }
 .contents + .contents { margin-top:calc(-1 * var(--space-16)); }
 /* One thing a participant saw. What it was and its title are ours; what is
    inside the frame is theirs: one hairline, as the site frames a figure. */
@@ -424,6 +425,7 @@ h2[id], h3[id] { scroll-margin-top:5rem; }
 .screen__frame > :first-child, .screen__frame > .rich > :first-child { margin-top:0; }
 .screen__frame > :last-child { margin-bottom:0; }
 .screen__frame h3 { margin:var(--space-24) 0 var(--space-4); }
+.screen__frame > .chapter:first-child > h3 { margin-top:0; }
 .overview { display:flex; align-items:flex-start; gap:var(--space-24); max-width:44rem; margin:0 0 var(--space-8); }
 .overview__logo { flex:none; max-width:96px; max-height:64px; }
 .overview p { margin:0 0 var(--space-4); }

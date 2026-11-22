@@ -47,7 +47,7 @@ foreach ($tasks as $i => $task) {
     // Only the tasks are numbered: the export gives their order. About and
     // Helpdesk are pages a participant can open at any time, not steps.
     $screens[] = ['task-' . ($i + 1), 'Task ' . ($i + 1) . ' of ' . count($tasks) . ' · ' . $label,
-                  $title !== '' ? $title : 'Untitled task', ['task' => $task, 'type' => $type, 'title' => $title]];
+                  $title !== '' ? $title : 'Task ' . ($i + 1), ['task' => $task, 'type' => $type, 'title' => $title]];
 }
 if (($helpdesk = setup_text($meta['helpdesk'] ?? null)) !== '') { $screens[] = ['helpdesk', 'Helpdesk page', 'Helpdesk', ['rich' => $helpdesk]]; }
 
@@ -122,7 +122,9 @@ page_top('study', 'study', $studyName !== '' ? '<span class="eyebrow">Study</spa
             // title again (Consent, Privacy statement) it is left out. ?>
       <?php if ($kind !== $title): ?><p class="screen__kind"><?= h($kind) ?></p><?php endif; ?>
       <h2><?= h($title) ?></h2>
-      <div class="screen__frame">
+      <?php // What goes in the frame is drawn first, so that a task the setup says
+            // nothing more about gets one line in our voice, not an empty box. ?>
+      <?php ob_start(); ?>
       <?php if (isset($body['rich'])): ?>
         <div class="rich"><?= rich_html($body['rich']) ?></div>
       <?php elseif (isset($body['privacy'])): $file = setup_ref($body['privacy'], $assets); ?>
@@ -172,7 +174,15 @@ page_top('study', 'study', $studyName !== '' ? '<span class="eyebrow">Study</spa
           <?php endforeach; ?>
         <?php endif; ?>
       <?php endif; ?>
+      <?php $inside = trim((string)ob_get_clean()); ?>
+      <?php if ($inside !== ''): ?>
+      <div class="screen__frame">
+      <?= $inside ?>
+
       </div>
+      <?php else: ?>
+      <p class="meta">The study setup records nothing more about this task.</p>
+      <?php endif; ?>
     </section>
     <?php endforeach; ?>
   <?php endif; ?>
@@ -186,7 +196,7 @@ page_top('study', 'study', $studyName !== '' ? '<span class="eyebrow">Study</spa
       <p class="meta">From the donation flows · <?= count($flows) ?> platform<?= count($flows) === 1 ? '' : 's' ?></p>
     </div></div>
 
-    <?php foreach ($flows as $slug => $doc): ?>
+    <?php foreach ($flows as $slug => $doc): if (!$doc['sections']) { continue; } ?>
       <nav class="contents" aria-label="<?= h($doc['platform_title']) ?> tables">
         <p class="eyebrow"><?= h($doc['platform_title']) ?> tables</p>
         <ul>

@@ -13,7 +13,8 @@
 /** What each input tag is written as. Anything else is dropped, its text kept. */
 const RICH_TAGS = [
     'p' => 'p', 'div' => 'p', 'br' => 'br',
-    // Headings sit below the Study page's own section headings (h2, h3).
+    // Headings sit below the Study page's own (a screen's title is an h2, a
+    // manual chapter an h3).
     'h1' => 'h4', 'h2' => 'h5', 'h3' => 'h6', 'h4' => 'h6', 'h5' => 'h6', 'h6' => 'h6',
     'strong' => 'strong', 'b' => 'strong', 'em' => 'em', 'i' => 'em', 'u' => 'u',
     's' => 's', 'del' => 's', 'strike' => 's',
