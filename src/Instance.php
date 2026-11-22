@@ -334,6 +334,27 @@ function inst_handle_setup_post(array $post, array $files): array {
         $r = flows_ingest_upload($f['tmp_name'], $flows);
         return $flash($r['ok'] ? 'ok' : 'error', $r['message']);
     }
+    if ($action === 'upload_setup') {
+        $f = $files['setup_zip'] ?? null;
+        if (!is_array($f) || ($f['error'] ?? 1) !== 0 || !is_string($f['tmp_name'] ?? null)) {
+            return $flash('error', 'The upload did not arrive — please choose the zip and try again.');
+        }
+        $dest = inst_paths()['setup'];
+        if ($dest === null) { return $flash('error', 'This instance has no storage volume configured — contact whoever set up this workspace.'); }
+        $r = setup_ingest_upload($f['tmp_name'], $dest, is_string($f['name'] ?? null) ? $f['name'] : '');
+        // The study setup names the study when nothing has: an empty name is
+        // filled from it, a name someone typed is never overwritten.
+        if ($r['ok'] && $r['name'] !== null) {
+            $inst = inst_load() ?? [];
+            if (trim((string)($inst['study_name'] ?? '')) === '') { $inst['study_name'] = $r['name']; inst_save($inst); }
+        }
+        return $flash($r['ok'] ? 'ok' : 'error', $r['message']);
+    }
+    if ($action === 'remove_setup') {
+        $dest = inst_paths()['setup'];
+        if ($dest === null || !setup_remove($dest)) { return $flash('error', 'There is no study setup to remove.'); }
+        return $flash('ok', 'Removed the study setup — upload it again to restore it.');
+    }
     if ($action === 'remove_flow') {
         $flows = inst_paths()['flows'];
         $slug = (string)($post['slug'] ?? '');

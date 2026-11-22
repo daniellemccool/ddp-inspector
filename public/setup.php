@@ -11,6 +11,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && inst_root() !== null) {
 }
 $storageMode = inst_root() !== null;
 $flows = $storageMode ? flows_load_all() : [];
+$studySetup = $storageMode ? setup_load() : null;
 $inst = $storageMode ? inst_load() : null;
 $status = inst_status();
 // The forms below call csrf_field() well after HTML output has started; force the
@@ -39,6 +40,26 @@ if ($storageMode) { csrf_token(); }
     <label class="field">Study name
       <input name="study_name" value="<?= h((string)($inst['study_name'] ?? '')) ?>"></label>
     <button>Save<?= go_mark() ?></button>
+  </form>
+
+  <h3>Study setup <span class="part__from">from <a href="https://next.eyra.co/"<?= $ext ?>>Next</a></span> <?= $optional ?></h3>
+  <p class="meta">What participants saw: information pages, consent, instructions and tasks. In Next, open the study, open the ⋮ menu next to Publish and choose Export, then upload that zip here.</p>
+  <?php if ($studySetup !== null): ?>
+    <ul class="flows">
+      <?php $stored = setup_summary($studySetup); ?>
+      <li><span><span class="flows__name"><?= h($stored['name']) ?></span> <?= h($stored['when']) ?></span>
+        <form method="post">
+          <?= csrf_field() ?><input type="hidden" name="action" value="remove_setup">
+          <button class="quiet">Remove</button>
+        </form></li>
+    </ul>
+  <?php else: ?>
+    <p class="meta">Without a study setup, the inspector cannot show the consent, instructions or tasks.</p>
+  <?php endif; ?>
+  <form method="post" enctype="multipart/form-data" class="toolbar">
+    <?= csrf_field() ?><input type="hidden" name="action" value="upload_setup">
+    <input type="file" name="setup_zip" accept=".zip" required>
+    <button>Upload setup<?= go_mark() ?></button>
   </form>
 
   <h3>Donation flows <span class="part__from">from the <a href="https://datadonation.eu/software/script-selector/"<?= $ext ?>>script selector</a></span> <?= $optional ?></h3>

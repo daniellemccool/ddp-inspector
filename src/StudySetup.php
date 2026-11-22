@@ -171,3 +171,38 @@ function setup_load(): ?array {
     return ['meta' => $meta, 'crate' => inst_read_json("$dir/ro-crate-metadata.json"),
             'warnings' => $warnings, 'uploaded' => inst_read_json("$dir/upload-meta.json") ?? [], 'assets' => $assets];
 }
+
+/** Does this zip hold a next-metadata.json one folder down? Used to tell a
+ *  researcher who put a study setup in the donation-flows upload where it goes. */
+function setup_zip_is_study_setup(string $zipPath): bool {
+    if (!class_exists('ZipArchive') || !is_file($zipPath)) { return false; }
+    $za = new ZipArchive();
+    if ($za->open($zipPath, ZipArchive::RDONLY) !== true) { return false; }
+    $found = false;
+    for ($i = 0; $i < min($za->numFiles, SETUP_MAX_ENTRIES) && !$found; $i++) {
+        $found = preg_match('~^[^/]+/next-metadata\.json$~', (string)$za->getNameIndex($i)) === 1;
+    }
+    $za->close();
+    return $found;
+}
+
+/** "21 Nov 2026" for an ISO date; '' when there is none or it does not parse. */
+function setup_day(mixed $iso): string {
+    $ts = is_string($iso) && trim($iso) !== '' ? stats_parse_date_any($iso) : null;
+    return $ts === null ? '' : gmdate('j M Y', $ts);
+}
+
+/** What Setup lists for the stored study setup: its name, and when it was
+ *  exported (the crate's date) or, when the zip had no crate, uploaded.
+ *  @return array{name:string, when:string} */
+function setup_summary(array $setup): array {
+    $name = $setup['meta']['assignment']['name'] ?? null;
+    $name = is_string($name) && trim($name) !== '' ? trim($name) : 'Study setup';
+    $exported = '';
+    foreach ((array)($setup['crate']['@graph'] ?? []) as $node) {
+        if (is_array($node) && ($node['@id'] ?? null) === './') { $exported = setup_day($node['datePublished'] ?? null); }
+    }
+    if ($exported !== '') { return ['name' => $name, 'when' => "exported $exported"]; }
+    $uploaded = setup_day($setup['uploaded']['uploaded_at'] ?? null);
+    return ['name' => $name, 'when' => $uploaded !== '' ? "uploaded $uploaded" : ''];
+}

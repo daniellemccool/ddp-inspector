@@ -203,6 +203,60 @@ eq(flows_load_all(), [], 'no flows left');
 $r = inst_handle_setup_post(['action' => 'remove_flow', 'csrf' => csrf_token(), 'slug' => 'tiktok'], []);
 eq($r['flash'][0]['kind'], 'error', 'removing a flow twice is an error');
 
+// The study setup exported from Next is uploaded in step 01, beside the flows.
+$setupZip = $scratch2 . '-setup.zip';
+make_setup_zip($setupZip, ['example/next-metadata.json' => (string)json_encode(example_setup_meta()),
+    'example/ro-crate-metadata.json' => '{"@graph":[{"@id":"./","@type":"Dataset","name":"Example study","datePublished":"2026-11-21T17:33:42.034826Z"}]}',
+    'example/assets/logo.png' => 'PNG', 'example/assets/document-1.pdf' => 'PDF']);
+$upSetup = fn() => inst_handle_setup_post(['action' => 'upload_setup', 'csrf' => csrf_token()],
+    ['setup_zip' => ['tmp_name' => $setupZip, 'error' => 0, 'name' => 'example_20261121.zip']])['flash'][0];
+$_POST = [];
+check(str_contains(render_page('setup.php', []), 'Without a study setup'), 'with no study setup, the page says what is missing');
+// It fills an empty study name and never overwrites one.
+inst_handle_setup_post(['action' => 'save_name', 'csrf' => csrf_token(), 'study_name' => ''], []);
+$r = $upSetup();
+eq($r['kind'], 'ok', 'study setup upload accepted');
+check(str_contains($r['text'], 'Example study'), 'the upload message names the study');
+eq(inst_load()['study_name'], 'Example study', 'an empty study name is filled from the study setup');
+eq(inst_load()['source_mode'], 'local', 'filling the name keeps the source');
+eq(setup_load()['uploaded']['zip_name'] ?? null, 'example_20261121.zip', 'the uploaded file name is recorded');
+inst_handle_setup_post(['action' => 'save_name', 'csrf' => csrf_token(), 'study_name' => 'Mine'], []);
+$upSetup();
+eq(inst_load()['study_name'], 'Mine', 'a typed study name is never overwritten');
+$_POST = [];
+$html = render_page('setup.php', []);
+check(preg_match('~<span class="flows__name">Example study</span>\s*exported 21 Nov 2026~', $html) === 1, 'the stored study setup is listed with its export date');
+check(str_contains($html, 'href="https://next.eyra.co/" target="_blank" rel="noopener noreferrer"'), 'Next is linked');
+check(str_contains($html, 'name="action" value="remove_setup"'), 'the study setup has a Remove form');
+check(substr_count($html, 'class="optional"') >= 3, 'the step and both upload parts are marked optional');
+$ps = strpos($html, '<h3>Study setup'); $pf = strpos($html, '<h3>Donation flows');
+check($ps !== false && $pf !== false && $ps < $pf, 'the study setup part comes before the donation flows');
+check(!str_contains($html, 'Without a study setup'), 'no "without" line while a study setup is stored');
+// The two uploads are easy to mix up: each names the right place.
+$r = inst_handle_setup_post(['action' => 'upload_flow', 'csrf' => csrf_token()], ['flow_zip' => ['tmp_name' => $setupZip, 'error' => 0]]);
+eq($r['flash'][0]['kind'], 'error', 'a study setup is not accepted as a donation flow');
+check(str_contains($r['flash'][0]['text'], 'Study setup'), 'the message points at the study setup part');
+$r = inst_handle_setup_post(['action' => 'upload_setup', 'csrf' => csrf_token()], ['setup_zip' => ['tmp_name' => $zip, 'error' => 0]]);
+eq($r['flash'][0]['kind'], 'error', 'a donation flow is not accepted as a study setup');
+check(str_contains($r['flash'][0]['text'], 'Donation flows'), 'the message points at the donation flows part');
+check(setup_load() !== null, 'a refused upload leaves the stored study setup alone');
+$r = inst_handle_setup_post(['action' => 'upload_setup', 'csrf' => csrf_token()], []);
+eq($r['flash'][0]['kind'], 'error', 'an upload without a file is an error');
+// Removing it leaves the name alone.
+$r = inst_handle_setup_post(['action' => 'remove_setup', 'csrf' => csrf_token()], []);
+eq($r['flash'][0]['kind'], 'ok', 'study setup removal accepted');
+eq(setup_load(), null, 'the study setup is gone');
+eq(inst_load()['study_name'], 'Mine', 'removing the study setup keeps the study name');
+$r = inst_handle_setup_post(['action' => 'remove_setup', 'csrf' => csrf_token()], []);
+eq($r['flash'][0]['kind'], 'error', 'removing the study setup twice is an error');
+// Before any source exists, a study setup can already be uploaded: it names
+// the study without making the instance configured.
+@unlink("$scratch2/config/instance.json");
+$upSetup();
+eq(inst_load()['study_name'] ?? null, 'Example study', 'a study setup names a brand-new instance');
+eq(inst_configured(), false, 'a study setup alone does not make the instance configured');
+inst_handle_setup_post(['action' => 'remove_setup', 'csrf' => csrf_token()], []);
+
 // An instance.json written by the old Setup (every key it ever wrote) keeps
 // all of it when only the name or only the daily check is saved: a save
 // that wrote just its own key would unconfigure a live workspace.
