@@ -82,7 +82,7 @@ eq(setup_load()['assets'], [], 'a second setup with fewer files leaves no stale 
 check(!file_exists("$dest/assets/logo.png"), 'the first setup\'s logo is gone');
 check(!file_exists("$dest/ro-crate-metadata.json"), 'the first setup\'s crate is gone');
 eq(setup_load()['crate'], null, 'no crate loaded when the zip had none');
-check(glob("$dest.*") === [], 'no .new or .old directory left beside the setup');
+check(glob("$dest.new") === [] && glob("$dest.old") === [], 'no .new or .old directory left beside the setup');
 
 // Export warnings: the files Next could not include, top folder stripped.
 make_setup_zip($zip, $full + ['example/export-warnings.json' =>
@@ -102,6 +102,94 @@ $za->close();
 $r = setup_ingest_upload($zip, $dest);
 eq($r['ok'], true, 'explicit folder entries are fine');
 check(!str_contains($r['message'], 'left out'), 'folder entries are not counted as left out');
+
+// --- the unpacked-size cap, and zips that lie about sizes ------------------------
+// (The real cap is 256 MB; the tests pass a small one.)
+$kb = str_repeat('x', 1000);
+$three = ['example/next-metadata.json' => $metaJson, 'example/assets/a.png' => $kb, 'example/assets/b.png' => $kb, 'example/assets/c.png' => $kb];
+make_setup_zip($zip, $three);
+eq(setup_ingest_upload($zip, $dest, '', ['unpacked' => 100000])['ok'], true, 'under the unpacked cap: accepted');
+$r = setup_ingest_upload($zip, $dest, '', ['unpacked' => 2500]);
+eq($r['ok'], false, 'over the unpacked cap: rejected');
+check(str_contains($r['message'], 'too large'), 'over the cap: the message says too large');
+// A zip64 entry can declare a size so large it reads back negative; added to
+// the others it would pull the total back under the cap.
+$declare64 = function (string $path, string $entry, string $size64le): void {
+    $z = (string)file_get_contents($path);
+    $eocd = strrpos($z, "PK\x05\x06");
+    $p = unpack('V', substr($z, $eocd + 16, 4))[1];
+    while (substr($z, $p, 4) === "PK\x01\x02") {
+        [$n, $m, $k] = array_values(unpack('v3', substr($z, $p + 28, 6)));
+        if (substr($z, $p + 46, $n) === $entry) {
+            $z = substr($z, 0, $p + 24) . "\xFF\xFF\xFF\xFF" . pack('vv', $n, $m + 12) . substr($z, $p + 32, 14 + $n)
+               . pack('vv', 1, 8) . $size64le . substr($z, $p + 46 + $n);
+            $eocd += 12;
+            $z = substr($z, 0, $eocd + 12) . pack('V', unpack('V', substr($z, $eocd + 12, 4))[1] + 12) . substr($z, $eocd + 16);
+            break;
+        }
+        $p += 46 + $n + $m + $k;
+    }
+    file_put_contents($path, $z);
+};
+make_setup_zip($zip, $three + ['example/notes.txt' => 'x']);
+$declare64($zip, 'example/notes.txt', pack('P', -1 << 30));   // "minus one GiB"
+$za = new ZipArchive(); $opened = $za->open($zip, ZipArchive::RDONLY) === true;
+$declared = $opened ? ($za->statName('example/notes.txt')['size'] ?? null) : null;
+if ($opened) { $za->close(); }
+check(!$opened || (is_int($declared) && $declared < 0), 'the crafted entry declares a negative size (or the zip does not open)');
+$r = setup_ingest_upload($zip, $dest, '', ['unpacked' => 2500]);
+eq($r['ok'], false, 'a negative declared size cannot pull the total under the cap');
+$r = setup_ingest_upload($zip, $dest, '', ['unpacked' => 100000]);
+eq($r['ok'], false, 'an entry declaring a negative size is refused outright');
+// A corrupt download (bad checksum) is a bad zip, not a full volume.
+make_setup_zip($zip, ['example/next-metadata.json' => $metaJson, 'example/assets/a.png' => str_repeat('CORRUPTME', 200)]);
+$za = new ZipArchive(); $za->open($zip); $za->setCompressionName('example/assets/a.png', ZipArchive::CM_STORE); $za->close();
+$z = (string)file_get_contents($zip);
+$at = strpos($z, 'CORRUPTMECORRUPTME');
+check($at !== false, 'the stored asset bytes are found in the zip');
+$z[$at + 5] = 'X';
+file_put_contents($zip, $z);
+make_setup_zip("$ssRoot/good.zip", $full);
+setup_ingest_upload("$ssRoot/good.zip", $dest);
+$r = setup_ingest_upload($zip, $dest);
+eq($r['ok'], false, 'a corrupt zip is rejected');
+check(str_contains($r['message'], "doesn't look like a study setup") && !str_contains($r['message'], 'volume'), 'a corrupt zip is reported as a bad zip, not a full volume');
+eq(setup_load()['assets'], ['document-1.pdf', 'logo.png'], 'a corrupt zip leaves the stored setup alone');
+check(glob("$dest.new") === [], 'a corrupt zip leaves no .new directory');
+
+// --- the uploaded file's name ------------------------------------------------------
+$r = setup_ingest_upload("$ssRoot/good.zip", $dest, str_repeat('a', 199) . 'é.zip');
+eq($r['ok'], true, 'a long non-ASCII file name does not stop the upload');
+check(json_encode(setup_load()['uploaded']['zip_name']) !== false && mb_check_encoding((string)setup_load()['uploaded']['zip_name'], 'UTF-8'),
+      'the kept file name is cut on a character boundary');
+eq(setup_ingest_upload("$ssRoot/good.zip", $dest, "bad\xff\xfename.zip")['ok'], true, 'a file name that is not UTF-8 does not stop the upload');
+
+// --- one upload at a time ------------------------------------------------------------
+// Two uploads at once would share the staging directory. While another
+// request holds the lock, this one waits briefly, then says so.
+$held = fopen("$dest.lock", 'c');
+check($held !== false && flock($held, LOCK_EX | LOCK_NB), 'the test holds the study setup lock');
+$r = setup_ingest_upload("$ssRoot/v2.zip", $dest, '', ['lock_wait' => 0.2]);
+eq($r['ok'], false, 'an upload while another is running is refused');
+check(str_contains($r['message'], 'another upload'), 'the message says another upload is running');
+eq(setup_load()['assets'], ['document-1.pdf', 'logo.png'], 'the refused upload changed nothing');
+eq(setup_remove($dest, 0.2), false, 'removal waits for the lock too');
+check(setup_load() !== null, 'the setup is still there after the refused removal');
+flock($held, LOCK_UN); fclose($held);
+eq(setup_ingest_upload("$ssRoot/good.zip", $dest, '', ['lock_wait' => 0.2])['ok'], true, 'once the lock is free the upload goes through');
+
+// --- a leftover staging directory nobody can read ------------------------------------
+@mkdir("$dest.new/assets", 0755, true); file_put_contents("$dest.new/assets/x", 'x'); chmod("$dest.new", 0000);
+if (!@is_readable("$dest.new") || @scandir("$dest.new") === false) {
+    $threw = false;
+    try { $r = setup_ingest_upload("$ssRoot/good.zip", $dest); } catch (Throwable $e) { $threw = true; }
+    check(!$threw, 'an unreadable leftover staging directory does not throw');
+    check(!$threw && $r['ok'] === false && str_contains($r['message'], 'Could not save'), 'it is reported as a problem saving');
+    eq(setup_load()['assets'] ?? null, ['document-1.pdf', 'logo.png'], 'and the stored setup is left alone');
+} else {
+    fwrite(STDERR, "SKIP: unreadable-directory check (running as root)\n");
+}
+chmod("$dest.new", 0755); setup_rmtree("$dest.new");
 
 // Removing.
 eq(setup_remove($dest), true, 'study setup removed');

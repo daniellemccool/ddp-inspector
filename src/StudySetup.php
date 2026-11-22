@@ -21,29 +21,56 @@ function setup_asset_name_ok(string $name): bool {
     return preg_match('/^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/D', $name) === 1;
 }
 
-/** Delete a directory tree the app itself wrote (never follows a link). */
+/** Delete a directory tree the app itself wrote (never follows a link).
+ *  A tree it cannot read is left where it is; the caller's next write fails
+ *  and is reported. */
 function setup_rmtree(string $dir): void {
     if (is_link($dir) || is_file($dir)) { @unlink($dir); return; }
     if (!is_dir($dir)) { return; }
-    $it = new RecursiveIteratorIterator(
-        new RecursiveDirectoryIterator($dir, FilesystemIterator::SKIP_DOTS), RecursiveIteratorIterator::CHILD_FIRST);
-    foreach ($it as $f) {
-        if ($f->isDir() && !$f->isLink()) { @rmdir($f->getPathname()); } else { @unlink($f->getPathname()); }
+    try {
+        $it = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($dir, FilesystemIterator::SKIP_DOTS), RecursiveIteratorIterator::CHILD_FIRST);
+        foreach ($it as $f) {
+            if ($f->isDir() && !$f->isLink()) { @rmdir($f->getPathname()); } else { @unlink($f->getPathname()); }
+        }
+    } catch (UnexpectedValueException) {
+        return;
     }
     @rmdir($dir);
 }
 
 /**
+ * Run $fn while holding the study setup's lock, so that two requests (a
+ * double click on Upload, two researchers) never share the staging
+ * directory. Waits up to $waitSeconds for another request to finish;
+ * returns null when it did not get the lock.
+ */
+function setup_locked(string $destDir, float $waitSeconds, callable $fn): mixed {
+    $parent = dirname($destDir);
+    if (!is_dir($parent)) { @mkdir($parent, 0755, true); }
+    $lock = @fopen($destDir . '.lock', 'c');
+    if ($lock === false) { return null; }
+    try {
+        $deadline = microtime(true) + $waitSeconds;
+        while (!flock($lock, LOCK_EX | LOCK_NB)) {
+            if (microtime(true) >= $deadline) { return null; }
+            usleep(50_000);
+        }
+        try { return $fn(); } finally { flock($lock, LOCK_UN); }
+    } finally {
+        fclose($lock);
+    }
+}
+
+/**
  * Read an uploaded study setup zip and store it under $destDir, replacing
  * what was there. A failure leaves the stored setup as it was.
+ * $limits (for tests): 'unpacked' => the cap on all entries together, in
+ * bytes; 'lock_wait' => seconds to wait for another upload to finish.
  * @return array{ok:bool, message:string, name:?string, tasks:?int}
  */
-function setup_ingest_upload(string $zipPath, string $destDir, string $origName = ''): array {
+function setup_ingest_upload(string $zipPath, string $destDir, string $origName = '', array $limits = []): array {
     $fail = fn(string $msg) => ['ok' => false, 'message' => $msg, 'name' => null, 'tasks' => null];
-    $notSetup = "That doesn't look like a study setup from Next. Upload the zip exactly as Next downloaded it (⋮ → Export).";
-    $tooLarge = 'That zip is too large to be a study setup (more than ' . SETUP_MAX_ENTRIES . ' files, or more than '
-              . intdiv(SETUP_MAX_UNPACKED, 1024 * 1024) . ' MB unpacked).';
-    $cantSave = 'Could not save the study setup — the storage volume may be full or read-only.';
     if (!class_exists('ZipArchive')) {
         return $fail('This workspace is missing a component (php-zip) — contact whoever set up this workspace.');
     }
@@ -51,6 +78,19 @@ function setup_ingest_upload(string $zipPath, string $destDir, string $origName 
     if (filesize($zipPath) > SETUP_MAX_ZIP) {
         return $fail('That file is larger than ' . intdiv(SETUP_MAX_ZIP, 1024 * 1024) . ' MB — too large for a study setup here. Is it the right zip?');
     }
+    $maxUnpacked = (int)($limits['unpacked'] ?? SETUP_MAX_UNPACKED);
+    $result = setup_locked($destDir, (float)($limits['lock_wait'] ?? 20.0),
+        fn() => setup_ingest_locked($zipPath, $destDir, $origName, $maxUnpacked));
+    return $result ?? $fail('There is another upload of the study setup running — wait a moment and try again.');
+}
+
+/** The work of setup_ingest_upload(), with the lock held. */
+function setup_ingest_locked(string $zipPath, string $destDir, string $origName, int $maxUnpacked): array {
+    $fail = fn(string $msg) => ['ok' => false, 'message' => $msg, 'name' => null, 'tasks' => null];
+    $notSetup = "That doesn't look like a study setup from Next. Upload the zip exactly as Next downloaded it (⋮ → Export).";
+    $tooLarge = 'That zip is too large to be a study setup (more than ' . SETUP_MAX_ENTRIES . ' files, or more than '
+              . intdiv(SETUP_MAX_UNPACKED, 1024 * 1024) . ' MB unpacked).';
+    $cantSave = 'Could not save the study setup — the storage volume may be full or read-only.';
     $za = new ZipArchive();
     if ($za->open($zipPath, ZipArchive::RDONLY) !== true) { return $fail($notSetup); }
     $new = $destDir . '.new';
@@ -66,7 +106,11 @@ function setup_ingest_upload(string $zipPath, string $destDir, string $origName 
             if ($st === false) { return $fail($notSetup); }
             $name = (string)$st['name'];
             if (str_ends_with($name, '/')) { continue; }          // a folder entry
+            // A zip64 entry can declare a size that reads back negative: summed
+            // with the others it would slip the total under the cap.
+            if ((int)$st['size'] < 0) { return $fail($notSetup); }
             $total += (int)$st['size'];
+            if ($total > $maxUnpacked) { return $fail($tooLarge); }
             $slash = strpos($name, '/');
             if ($slash === false) { $rootFiles[] = $name; continue; }
             $tops[substr($name, 0, $slash)] = true;
@@ -79,18 +123,37 @@ function setup_ingest_upload(string $zipPath, string $destDir, string $origName 
             return $fail('That is a donation flow from the script selector — upload it under “Donation flows”.');
         }
         if ($rootFiles !== [] || count($tops) !== 1 || !isset($json['next-metadata.json'])) { return $fail($notSetup); }
-        if ($total > SETUP_MAX_UNPACKED) { return $fail($tooLarge); }
 
-        // An entry's bytes, never more than it declared (a zip can lie).
-        $read = function (array $st, int $cap) use ($za): ?string {
-            if ((int)$st['size'] > $cap) { return null; }
-            $h = $za->getStream((string)$st['name']);
-            if ($h === false) { return null; }
-            $data = stream_get_contents($h, (int)$st['size'] + 1);
+        // An entry's bytes, exactly as many as it declared (a zip can lie),
+        // read in pieces and handed to $sink. 'ok', or what went wrong:
+        // 'bad' (the zip: unreadable, a size that is not true, a failed
+        // checksum) or 'write' (the sink refused, i.e. the volume).
+        $copy = function (array $st, callable $sink) use ($za): string {
+            $h = @$za->getStream((string)$st['name']);
+            if ($h === false) { return 'bad'; }
+            $size = (int)$st['size']; $n = 0; $state = 'ok';
+            $crc = hash_init('crc32b');
+            while ($state === 'ok' && !feof($h)) {
+                $chunk = @fread($h, 65536);
+                if ($chunk === false) { $state = 'bad'; break; }
+                if ($chunk === '') { break; }
+                $n += strlen($chunk);
+                if ($n > $size) { $state = 'bad'; break; }
+                hash_update($crc, $chunk);
+                if (!$sink($chunk)) { $state = 'write'; }
+            }
+            // The checksum is checked here: reading a stream to its end does
+            // not report a mismatch, and a damaged download must not be stored.
+            if ($state === 'ok' && ($n !== $size || hexdec(hash_final($crc)) !== (int)$st['crc'])) { $state = 'bad'; }
             fclose($h);
-            return ($data === false || strlen($data) > (int)$st['size']) ? null : $data;
+            return $state;
         };
-        $metaText = $read($json['next-metadata.json'], SETUP_MAX_JSON);
+        $readText = function (array $st) use ($copy): ?string {
+            if ((int)$st['size'] > SETUP_MAX_JSON) { return null; }
+            $text = '';
+            return $copy($st, function (string $c) use (&$text) { $text .= $c; return true; }) === 'ok' ? $text : null;
+        };
+        $metaText = $readText($json['next-metadata.json']);
         $meta = $metaText === null ? null : json_decode($metaText, true);
         if (!is_array($meta) || !is_int($meta['format_version'] ?? null)) { return $fail($notSetup); }
 
@@ -100,26 +163,33 @@ function setup_ingest_upload(string $zipPath, string $destDir, string $origName 
         // The crate and the warnings are optional, and kept only if readable.
         foreach (['ro-crate-metadata.json', 'export-warnings.json'] as $opt) {
             if (!isset($json[$opt])) { continue; }
-            $text = $read($json[$opt], SETUP_MAX_JSON);
+            $text = $readText($json[$opt]);
             if ($text === null || !is_array(json_decode($text, true))) { continue; }
             if (@file_put_contents("$new/$opt", $text) === false) { return $fail($cantSave); }
         }
+        $written = 0;
         foreach ($assets as $name => $st) {
-            $in = $za->getStream((string)$st['name']);
-            $out = $in === false ? false : @fopen("$new/assets/$name", 'wb');
-            if ($in === false || $out === false) { if ($in !== false) { fclose($in); } return $fail($cantSave); }
-            $copied = stream_copy_to_stream($in, $out, (int)$st['size'] + 1);
-            fclose($in); fclose($out);
-            if ($copied === false) { return $fail($cantSave); }
-            if ($copied > (int)$st['size']) { return $fail($tooLarge); }
+            $out = @fopen("$new/assets/$name", 'wb');
+            if ($out === false) { return $fail($cantSave); }
+            $state = $copy($st, function (string $c) use ($out, &$written, $maxUnpacked) {
+                $written += strlen($c);
+                return $written <= $maxUnpacked && @fwrite($out, $c) === strlen($c);
+            });
+            fclose($out);
+            if ($written > $maxUnpacked) { return $fail($tooLarge); }
+            if ($state !== 'ok') { return $fail($state === 'write' ? $cantSave : $notSetup); }
         }
-        $zipName = substr((string)preg_replace('/[^\PC]/u', '', basename($origName)) ?: '', 0, 200);
+        // The uploaded file's name, for the record: no control characters, cut
+        // on a character boundary, and dropped if it is not UTF-8 at all.
+        $zipName = (string)preg_replace('/\p{C}/u', '', basename($origName));
+        $zipName = preg_match('/^.{0,200}/us', $zipName, $m) === 1 ? $m[0] : '';
         if (!inst_write_json_atomic("$new/upload-meta.json", ['uploaded_at' => gmdate('c'), 'zip_name' => $zipName])) {
             return $fail($cantSave);
         }
         // Swap the finished directory in; the old one goes only once the new one is in place.
         $old = $destDir . '.old';
         setup_rmtree($old);
+        if (is_dir($old)) { return $fail($cantSave); }
         if (is_dir($destDir) && !@rename($destDir, $old)) { return $fail($cantSave); }
         if (!@rename($new, $destDir)) { if (is_dir($old)) { @rename($old, $destDir); } return $fail($cantSave); }
         setup_rmtree($old);
@@ -135,11 +205,14 @@ function setup_ingest_upload(string $zipPath, string $destDir, string $origName 
     return ['ok' => true, 'message' => $message, 'name' => $name !== '' ? $name : null, 'tasks' => $tasks];
 }
 
-/** Remove the stored study setup. True when there was one. */
-function setup_remove(string $destDir): bool {
-    if (!is_dir($destDir)) { return false; }
-    setup_rmtree($destDir);
-    return !is_dir($destDir);
+/** Remove the stored study setup. True when there was one and it is gone
+ *  (false also when an upload is running and did not finish in time). */
+function setup_remove(string $destDir, float $lockWait = 20.0): bool {
+    return setup_locked($destDir, $lockWait, function () use ($destDir): bool {
+        if (!is_dir($destDir)) { return false; }
+        setup_rmtree($destDir);
+        return !is_dir($destDir);
+    }) ?? false;
 }
 
 /**
