@@ -201,7 +201,13 @@ eq($r['flash'][0]['kind'], 'ok', 'flow removal accepted');
 check(str_contains($r['flash'][0]['text'], 'TikTok'), 'removal message names the platform');
 eq(flows_load_all(), [], 'no flows left');
 $r = inst_handle_setup_post(['action' => 'remove_flow', 'csrf' => csrf_token(), 'slug' => 'tiktok'], []);
-eq($r['flash'][0]['kind'], 'error', 'removing a flow twice is an error');
+// A second click on Remove (a slow page invites one) is harmless.
+eq($r['flash'][0]['kind'], 'ok', 'removing a flow twice is harmless');
+check(str_contains($r['flash'][0]['text'], 'already removed'), 'the second flow removal says it was already removed');
+$r = inst_handle_setup_post(['action' => 'remove_flow', 'csrf' => csrf_token(), 'slug' => '../x'], []);
+eq($r['flash'][0]['kind'], 'error', 'a flow name that is not a plain one is still an error');
+$r = inst_handle_setup_post(['action' => 'remove_flow', 'csrf' => csrf_token()], []);
+eq($r['flash'][0]['kind'], 'error', 'a removal that names no flow is an error');
 
 // The study setup exported from Next is uploaded in step 01, beside the flows.
 $setupZip = $scratch2 . '-setup.zip';
@@ -248,7 +254,8 @@ eq($r['flash'][0]['kind'], 'ok', 'study setup removal accepted');
 eq(setup_load(), null, 'the study setup is gone');
 eq(inst_load()['study_name'], 'Mine', 'removing the study setup keeps the study name');
 $r = inst_handle_setup_post(['action' => 'remove_setup', 'csrf' => csrf_token()], []);
-eq($r['flash'][0]['kind'], 'error', 'removing the study setup twice is an error');
+eq($r['flash'][0]['kind'], 'ok', 'removing the study setup twice is harmless');
+check(str_contains($r['flash'][0]['text'], 'already removed'), 'the second setup removal says it was already removed');
 // Before any source exists, a study setup can already be uploaded: it names
 // the study without making the instance configured.
 @unlink("$scratch2/config/instance.json");

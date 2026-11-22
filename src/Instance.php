@@ -352,14 +352,21 @@ function inst_handle_setup_post(array $post, array $files): array {
     }
     if ($action === 'remove_setup') {
         $dest = inst_paths()['setup'];
-        if ($dest === null || !setup_remove($dest)) { return $flash('error', 'There is no study setup to remove.'); }
+        // Already gone (a second click on Remove) is not an error.
+        if ($dest === null || !is_dir($dest)) { return $flash('ok', 'The study setup was already removed.'); }
+        if (!setup_remove($dest)) { return $flash('error', 'The study setup could not be removed — try again in a moment.'); }
         return $flash('ok', 'Removed the study setup — upload it again to restore it.');
     }
     if ($action === 'remove_flow') {
         $flows = inst_paths()['flows'];
         $slug = (string)($post['slug'] ?? '');
         $title = (string)(flows_load_all()[$slug]['platform_title'] ?? $slug);
-        if ($flows === null || !flows_remove($flows, $slug)) { return $flash('error', 'That flow is not here any more.'); }
+        // A plain name that is simply not there: already removed (a second
+        // click on Remove), not an error.
+        if ($flows !== null && preg_match('/^[a-z0-9]+\z/', $slug) === 1 && !is_dir("$flows/$slug")) {
+            return $flash('ok', 'That flow was already removed.');
+        }
+        if ($flows === null || !flows_remove($flows, $slug)) { return $flash('error', 'That flow could not be removed.'); }
         return $flash('ok', "Removed the $title flow — upload it again to restore it.");
     }
     $cantSave = 'Could not save — the storage volume may be full or read-only.';
