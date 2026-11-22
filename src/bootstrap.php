@@ -5,6 +5,7 @@ require_once __DIR__ . '/Sample.php';
 require_once __DIR__ . '/Instance.php';
 require_once __DIR__ . '/Flows.php';
 require_once __DIR__ . '/StudySetup.php';
+require_once __DIR__ . '/RichText.php';
 require_once __DIR__ . '/Analysis.php';
 require_once __DIR__ . '/Study.php';
 require_once __DIR__ . '/StudyDb.php';
@@ -28,7 +29,7 @@ function asset_url(string $rel): string {
 /**
  * The document head, the site header and the title band every page shares,
  * up to the start of the page's own content. $section is the nav link to
- * mark current: 'participants' or 'settings'. $heading is the page's <h1>
+ * mark current: 'participants', 'study' or 'settings'. $heading is the page's <h1>
  * content, as HTML that is already escaped. The header follows
  * datadonation.eu's: the name over a subtitle (here the study's name), the
  * links on the right. Close the page with page_bottom().
@@ -37,7 +38,8 @@ function page_top(string $title, string $section, string $heading): void {
     $storage = inst_root() !== null;
     $study = $storage ? trim((string)(inst_load()['study_name'] ?? '')) : '';
     $links = ['participants' => ['index.php', 'Participants']];
-    if ($storage) { $links['settings'] = ['setup.php', 'Settings']; }
+    // The Study page and Settings both live on the storage volume.
+    if ($storage) { $links['study'] = ['study.php', 'Study']; $links['settings'] = ['setup.php', 'Settings']; }
     ?>
 <!doctype html>
 <html lang="en">

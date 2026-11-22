@@ -10,6 +10,15 @@ eq($doc['sections'][2]['vars'], ['Date', 'Search term'], 'section variables');
 check(str_contains($doc['sections'][0]['description'], 'recently viewed'), 'section description captured');
 eq($doc['sections'][2]['var_desc']['Search term'], 'The search query entered by the participant.', 'variable description');
 eq(flows_parse_doc('no heading here'), null, 'unparseable doc -> null');
+// The script selector writes where the flow's source is; only a GitHub
+// address is kept (it becomes a link on the Study page).
+$withUrl = "# X\n\n## T\n\nd\n\n| Variable | Description |\n| - | - |\n| `A` | a |\n\n## Build information\n\nThis flow was generated from commit `abcdef1234567` of the repository.\n\nView the source code at: https://github.com/d3i-infra/data-donation-task/commit/abcdef1234567\n";
+eq(flows_parse_doc($withUrl)['source_url'], 'https://github.com/d3i-infra/data-donation-task/commit/abcdef1234567', 'source address captured');
+eq(flows_parse_doc(str_replace('https://github.com/', 'https://evil.example/', $withUrl))['source_url'], null, 'only a GitHub address is kept');
+eq(flows_parse_doc(str_replace('commit/abcdef1234567', 'commit/abc"onclick="x', $withUrl))['source_url'], null, 'an address with odd characters is not kept');
+eq(flows_parse_doc(str_replace('https://github.com/', 'https://github.com.evil.example/', $withUrl))['source_url'], null, 'a look-alike host is not kept');
+eq($doc['source_url'], null, 'a documentation file without the line has no source address');
+eq(count(flows_parse_doc($withUrl)['sections']), 1, 'the build information is still not a section');
 
 // Matching: two tables with identical column sets resolve by order.
 $tables = [
@@ -75,7 +84,13 @@ copy(__DIR__ . '/fixtures/flows/tiktok/documentation.txt', "$flows_scratch/confi
 file_put_contents("$flows_scratch/config/flows/broken/documentation.txt", ''); // no '# ' heading -> unparseable
 $GLOBALS['__cfg'] = ['storage_root' => $flows_scratch, 'default_n' => 15, 'base_path' => ''];
 
+inst_write_json_atomic("$flows_scratch/config/flows/facebook/build-meta.json",
+    ['commit' => '356f6e1', 'build_zip_name' => 'build_a_facebook_b_2026-07-29_11-03-36.zip', 'uploaded_at' => '2026-11-21T10:00:00+00:00']);
 $all = flows_load_all();
+// Each flow carries its upload details (build-meta.json), for the codebook.
+eq($all['facebook']['meta']['build_zip_name'] ?? null, 'build_a_facebook_b_2026-07-29_11-03-36.zip', 'flow carries its build name');
+eq($all['facebook']['meta']['uploaded_at'] ?? null, '2026-11-21T10:00:00+00:00', 'flow carries its upload time');
+eq($all['tiktok']['meta'] ?? null, [], 'a flow without build-meta.json has empty upload details');
 eq(array_keys($all), ['facebook', 'tiktok'], 'flows_load_all returns both slugs ksorted, silently skipping the unparseable one');
 eq($all['facebook']['platform_title'], 'Facebook', 'facebook doc parsed via flows_load_all');
 eq($all['tiktok']['platform_title'], 'TikTok', 'tiktok doc parsed via flows_load_all');

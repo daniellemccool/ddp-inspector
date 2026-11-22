@@ -191,8 +191,31 @@ if (!@is_readable("$dest.new") || @scandir("$dest.new") === false) {
 }
 chmod("$dest.new", 0755); setup_rmtree("$dest.new");
 
+// Serving the packaged files (asset.php?f=<name>): only a stored file, only
+// by a plain name; PDFs and images inline, anything else as a download.
+check(setup_asset_file('logo.png') === "$dest/assets/logo.png", 'stored asset resolves to its path');
+foreach (['../next-metadata.json', 'next-metadata.json', 'upload-meta.json', 'nosuch.png', '', 'a/b.png', 'assets/logo.png', '.', '..'] as $bad) {
+    eq(setup_asset_file($bad), null, 'asset refused: ' . json_encode($bad));
+}
+eq(setup_asset_type('g.PDF'), ['type' => 'application/pdf', 'inline' => true], 'pdf inline');
+eq(setup_asset_type('a.png'), ['type' => 'image/png', 'inline' => true], 'png inline');
+eq(setup_asset_type('a.jpeg'), ['type' => 'image/jpeg', 'inline' => true], 'jpeg inline');
+eq(setup_asset_type('a.jpg'), ['type' => 'image/jpeg', 'inline' => true], 'jpg inline');
+eq(setup_asset_type('a.gif'), ['type' => 'image/gif', 'inline' => true], 'gif inline');
+eq(setup_asset_type('a.webp'), ['type' => 'image/webp', 'inline' => true], 'webp inline');
+eq(setup_asset_type('s.svg'), ['type' => 'image/svg+xml', 'inline' => true], 'svg inline');
+eq(setup_asset_type('x.html'), ['type' => 'application/octet-stream', 'inline' => false], 'html is a download');
+eq(setup_asset_type('x.docx'), ['type' => 'application/octet-stream', 'inline' => false], 'unknown type is a download');
+eq(setup_asset_type('noextension'), ['type' => 'application/octet-stream', 'inline' => false], 'no extension is a download');
+eq(render_page('asset.php', ['f' => 'logo.png']), 'PNGBYTES', 'asset bytes served');
+eq(render_page('asset.php', ['f' => '../next-metadata.json']), 'Not found', 'a refused name gets "Not found" and no content');
+eq(render_page('asset.php', ['f' => 'nosuch.png']), 'Not found', 'a file that is not stored gets "Not found"');
+eq(render_page('asset.php', []), 'Not found', 'no name gets "Not found"');
+eq(render_page('asset.php', ['f' => ['logo.png']]), 'Not found', 'a name that is not a string gets "Not found"');
+
 // Removing.
 eq(setup_remove($dest), true, 'study setup removed');
+eq(render_page('asset.php', ['f' => 'logo.png']), 'Not found', 'nothing is served once the study setup is removed');
 eq(setup_load(), null, 'nothing loads after removal');
 check(!is_dir($dest), 'the directory is gone');
 eq(setup_remove($dest), false, 'removing twice reports nothing to remove');

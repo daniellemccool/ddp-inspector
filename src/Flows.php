@@ -1,7 +1,7 @@
 <?php
 function flows_parse_doc(string $text): ?array {
     $lines = preg_split('/\r?\n/', $text);
-    $title = null; $commit = null; $sections = []; $cur = null;
+    $title = null; $commit = null; $sourceUrl = null; $sections = []; $cur = null;
     foreach ($lines as $line) {
         if ($title === null && preg_match('/^# (.+)$/', $line, $m)) { $title = trim($m[1]); continue; }
         if (preg_match('/^## (.+)$/', $line, $m)) {
@@ -16,6 +16,10 @@ function flows_parse_doc(string $text): ?array {
             $cur['vars'][] = $m[1]; $cur['var_desc'][$m[1]] = $m[2]; continue;
         }
         if (preg_match('/commit `([0-9a-f]{7,40})`/', $line, $m)) { $commit = $m[1]; }
+        // Where the flow's source is, as the script selector writes it. It becomes a
+        // link, so only a plain GitHub address is kept.
+        if (preg_match('~^View the source code at:\s*(\S+)\s*$~', $line, $m)
+                && preg_match('~^https://github\.com/[A-Za-z0-9._/-]+\z~', $m[1])) { $sourceUrl = $m[1]; }
         if (!str_starts_with($line, '|') && trim($line) !== '' && trim($line) !== '---' && $cur['vars'] === []) {
             $cur['description'] .= (($cur['description'] === '') ? '' : ' ') . trim($line);
         }
@@ -23,10 +27,11 @@ function flows_parse_doc(string $text): ?array {
     if ($cur !== null) { $sections[] = $cur; }
     if ($title === null) { return null; }
     $sections = array_values(array_filter($sections, fn($s) => !isset($s['__build'])));
-    return ['platform_title' => $title, 'commit' => $commit, 'sections' => $sections];
+    return ['platform_title' => $title, 'commit' => $commit, 'source_url' => $sourceUrl, 'sections' => $sections];
 }
 
-/** @return array<string, array> parsed doc per platform slug */
+/** @return array<string, array> parsed doc per platform slug, each with 'meta':
+ *  its build-meta.json (commit, build_zip_name, uploaded_at), [] when missing */
 function flows_load_all(): array {
     $flows = inst_paths()['flows'];
     if ($flows === null || !is_dir($flows)) { return []; }
@@ -34,7 +39,7 @@ function flows_load_all(): array {
     foreach (glob("$flows/*/documentation.txt") ?: [] as $docPath) {
         $slug = basename(dirname($docPath));
         $doc = flows_parse_doc((string)@file_get_contents($docPath));
-        if ($doc !== null) { $out[$slug] = $doc; }
+        if ($doc !== null) { $out[$slug] = $doc + ['meta' => inst_read_json(dirname($docPath) . '/build-meta.json') ?? []]; }
     }
     ksort($out);
     return $out;

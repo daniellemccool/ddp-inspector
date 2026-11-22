@@ -26,7 +26,7 @@ function example_setup_meta(): array {
             ['type' => 'document', 'title' => 'How to request', 'description' => null, 'filename' => 'guide.pdf', 'file' => 'assets/document-1.pdf'],
             ['type' => 'data_donation', 'title' => 'Donate', 'description' => 'Extracts things', 'filename' => 'dd-example.zip']]]];
 }
-foreach (['DdpTest.php', 'StatsTest.php', 'SampleTest.php', 'AnalysisTest.php', 'InstanceTest.php', 'PagesTest.php', 'SetupTest.php', 'FlowsTest.php', 'StudyTest.php', 'StudySetupTest.php'] as $f) {
+foreach (['DdpTest.php', 'StatsTest.php', 'SampleTest.php', 'AnalysisTest.php', 'InstanceTest.php', 'PagesTest.php', 'SetupTest.php', 'FlowsTest.php', 'StudyTest.php', 'StudySetupTest.php', 'RichTextTest.php', 'StudyPageTest.php'] as $f) {
     $p = __DIR__ . '/' . $f;
     if (is_file($p)) { require $p; }
 }
