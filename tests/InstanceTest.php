@@ -22,6 +22,9 @@ $inst = ['study_name' => 'Pilot', 'source_mode' => 'local', 'local_path' => '/tm
          'cadence' => 'off', 'default_n' => 15];
 eq(inst_save($inst), true, 'instance saved');
 eq(inst_configured(), true, 'instance.json -> configured');
+inst_save(['study_name' => 'Pilot']);
+eq(inst_configured(), false, 'instance.json without a source -> not configured');
+inst_save($inst);
 eq(inst_load()['study_name'], 'Pilot', 'instance round-trips');
 
 $src = ['mode' => 'yoda', 'collection' => '/nluu10p/home/x',

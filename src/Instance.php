@@ -23,9 +23,15 @@ function inst_effective_ddp_dir(): ?string {
     return (is_string($d) && $d !== '') ? $d : null;
 }
 
+const INST_SOURCE_MODES = ['yoda', 'rd-link', 'local'];
+
+/** Configured = the donations have a source. The study name and the study
+ *  setup can be saved first; they write instance.json without one. */
 function inst_configured(): bool {
     $p = inst_paths();
-    if ($p['config'] !== null) { return is_file($p['config'] . '/instance.json'); }
+    if ($p['config'] !== null) {
+        return in_array(inst_load()['source_mode'] ?? null, INST_SOURCE_MODES, true);
+    }
     return inst_effective_ddp_dir() !== null;
 }
 
@@ -306,15 +312,32 @@ function inst_handle_setup_post(array $post, array $files): array {
         $r = flows_ingest_upload($f['tmp_name'], $flows);
         return $flash($r['ok'] ? 'ok' : 'error', $r['message']);
     }
+    $cantSave = 'Could not save — the storage volume may be full or read-only.';
+    // The study name and the daily check each have their own small form: one
+    // key merged into whatever is saved, so neither needs a source to exist.
+    if ($action === 'save_name') {
+        $inst = inst_load() ?? [];
+        $inst['study_name'] = trim((string)($post['study_name'] ?? ''));
+        return inst_save($inst) ? $flash('ok', 'Saved ✓') : $flash('error', $cantSave);
+    }
+    if ($action === 'save_cadence') {
+        $inst = inst_load() ?? [];
+        $inst['cadence'] = (($post['cadence'] ?? '') === 'daily') ? 'daily' : 'off';
+        if (!inst_save($inst)) { return $flash('error', $cantSave); }
+        return $flash('ok', $inst['cadence'] === 'daily'
+            ? 'Saved ✓ — new donations are checked every day.'
+            : 'Saved ✓ — new donations are not checked automatically.');
+    }
     if ($action === 'save_source') {
         $mode = (string)($post['source_mode'] ?? '');
-        if (!in_array($mode, ['yoda', 'rd-link', 'local'], true)) { return $flash('error', 'Please choose where your donations are stored.'); }
+        if (!in_array($mode, INST_SOURCE_MODES, true)) { return $flash('error', 'Please choose where your donations are stored.'); }
         $inst = inst_load() ?? [];
+        // The name and the daily check are not in this form: keep what is saved.
         $instance = [
-            'study_name'  => trim((string)($post['study_name'] ?? ($inst['study_name'] ?? ''))),
+            'study_name'  => trim((string)($inst['study_name'] ?? '')),
             'source_mode' => $mode,
             'local_path'  => $mode === 'local' ? trim((string)($post['local_path'] ?? '')) : null,
-            'cadence'     => (($post['cadence'] ?? '') === 'daily') ? 'daily' : 'off',
+            'cadence'     => (($inst['cadence'] ?? '') === 'daily') ? 'daily' : 'off',
             'default_n'   => (int)($inst['default_n'] ?? cfg('default_n', 15)),
         ];
         if (isset($inst['analysis_dirs'])) { $instance['analysis_dirs'] = $inst['analysis_dirs']; }
@@ -389,7 +412,7 @@ function inst_handle_setup_post(array $post, array $files): array {
             $c = inst_paths()['config'];
             if ($c !== null && is_file($c . '/source.json')) { @unlink($c . '/source.json'); }
         }
-        return $flash('ok', 'Saved ✓ — now run "Check & fetch" below.');
+        return $flash('ok', 'Saved ✓ — now fetch your donations in step 03.');
     }
     if ($action === 'check_fetch') {
         $probe = inst_probe();

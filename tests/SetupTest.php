@@ -19,6 +19,13 @@ check(str_contains($r['flash'][0]['text'], 'TikTok'), 'upload confirmation names
 
 // Yoda: the researcher's own configuration (pasted or uploaded, JSON or the
 // GoCommands YAML, exactly as the Yoda portal offers it) + data access password.
+// The study name is saved on its own, before any source exists; a name alone
+// does not make the instance configured.
+$r = inst_handle_setup_post(['action' => 'save_name', 'csrf' => csrf_token(), 'study_name' => '  Example study  '], []);
+eq($r['flash'][0]['kind'], 'ok', 'study name saved on its own');
+eq(inst_load()['study_name'], 'Example study', 'study name trimmed and stored');
+eq(inst_configured(), false, 'a name alone does not make the instance configured');
+
 $cfgJson = '{"irods_host": "lp0555.its.uu.nl", "irods_port": 1247, "irods_home": "/nluu10p/home",'
     . ' "irods_user_name": "r@uu.nl", "irods_zone_name": "nluu10p", "irods_default_resource": "irodsResc",'
     . ' "irods_authentication_scheme": "pam_password", "irods_encryption_algorithm": "AES-256-CBC",'
@@ -32,6 +39,11 @@ eq(inst_source_load()['password'], 'DAP123', 'data access password stored');
 eq(inst_source_load()['env']['irods_host'] ?? null, 'lp0555.its.uu.nl', 'pasted config stored as-is (host)');
 eq(inst_source_load()['env']['irods_default_resource'] ?? null, 'irodsResc', 'pasted config stored as-is (resource)');
 check(!isset(inst_source_load()['env']['irods_user_password']), 'no password inside the stored config');
+eq(inst_load()['study_name'], 'Example study', 'saving the source keeps the study name');
+$r = inst_handle_setup_post(['action' => 'save_cadence', 'csrf' => csrf_token(), 'cadence' => 'daily'], []);
+eq($r['flash'][0]['kind'], 'ok', 'daily check saved on its own');
+eq(inst_load()['cadence'], 'daily', 'daily check stored');
+eq(inst_load()['source_mode'], 'yoda', 'saving the daily check keeps the source');
 
 // The page shows the saved configuration (not secret) but never the DAP.
 $_POST = [];
@@ -39,13 +51,15 @@ $html = render_page('setup.php', []);
 check(str_contains($html, 'r@uu.nl'), 'saved configuration shown in the paste box');
 check(!str_contains($html, 'DAP123'), 'data access password never echoed');
 
-// Re-saving "About your study" (e.g. a new study name) with the config box
-// and password left blank keeps both — the password field shows "saved ✓".
+// Re-saving "Connect your donations" with the config box and password left
+// blank keeps both — the password field shows "saved ✓". The form no longer
+// holds the study name or the daily check: both keep their saved values.
 $r = inst_handle_setup_post(['action' => 'save_source', 'csrf' => csrf_token(),
-    'source_mode' => 'yoda', 'study_name' => 'Example study (renamed)',
+    'source_mode' => 'yoda', 'study_name' => 'IGNORED',
     'collection' => '/nluu10p/home/research-x', 'irods_config' => '', 'yoda_password' => ''], []);
 eq($r['flash'][0]['kind'], 'ok', 'yoda re-save with blank config and password accepted');
-eq(inst_load()['study_name'], 'Example study (renamed)', 'study name updated on re-save');
+eq(inst_load()['study_name'], 'Example study', 'save_source ignores a posted study name');
+eq(inst_load()['cadence'], 'daily', 'saving the source keeps the daily check');
 eq(inst_source_load()['password'], 'DAP123', 'blank password keeps the saved DAP');
 eq(inst_source_load()['env']['irods_user_name'] ?? null, 'r@uu.nl', 'blank config box keeps the saved config');
 
@@ -141,6 +155,11 @@ check(is_file("$scratch2/state/refresh-requested"), 'refresh flag touched by han
 
 $r = inst_handle_setup_post(['action' => 'refresh_now', 'csrf' => 'nope'], []);
 eq($r['flash'][0]['kind'], 'error', 'bad csrf rejected');
+
+// An unticked daily-check box posts no "cadence" at all: that switches it off.
+$r = inst_handle_setup_post(['action' => 'save_cadence', 'csrf' => csrf_token()], []);
+eq(inst_load()['cadence'], 'off', 'daily check switched off');
+eq(inst_load()['source_mode'], 'local', 'switching the daily check off keeps the source');
 
 // Page renders: no secret echo, flows listed, status shown.
 inst_write_json_atomic("$scratch2/state/refresh-status.json",
