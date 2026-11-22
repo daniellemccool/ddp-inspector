@@ -279,3 +279,23 @@ function setup_summary(array $setup): array {
     $uploaded = setup_day($setup['uploaded']['uploaded_at'] ?? null);
     return ['name' => $name, 'when' => $uploaded !== '' ? "uploaded $uploaded" : ''];
 }
+
+/** The stored file behind asset.php?f=<name>: its path, or null unless the
+ *  name is a plain one and that file is among the study setup's assets. */
+function setup_asset_file(string $name): ?string {
+    $dir = inst_paths()['setup'];
+    if ($dir === null || !setup_asset_name_ok($name)) { return null; }
+    $path = "$dir/assets/$name";
+    return is_file($path) && !is_link($path) ? $path : null;
+}
+
+/** How a packaged file is sent. PDFs and images open in the browser; any
+ *  other type is a download, so nothing uploaded is ever rendered as a page.
+ *  @return array{type:string, inline:bool} */
+function setup_asset_type(string $name): array {
+    $types = ['pdf' => 'application/pdf', 'png' => 'image/png', 'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg',
+              'gif' => 'image/gif', 'webp' => 'image/webp', 'svg' => 'image/svg+xml'];
+    $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
+    return isset($types[$ext]) ? ['type' => $types[$ext], 'inline' => true]
+                               : ['type' => 'application/octet-stream', 'inline' => false];
+}
