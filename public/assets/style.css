@@ -14,7 +14,9 @@
    no data tables of this density. Those are drawn here from its own parts:
    an action is the site's "More" link (label, dotted line, arrow disc), a
    notice sits on a short line between two nodes, a problem carries the coral
-   exclamation disc, and the setup steps hang on one line, numbered in discs. */
+   exclamation disc, and the setup steps hang on one line, numbered in discs.
+   A quiet action (remove, save one tick box) is the site's text link, and
+   "optional" after a heading is the eyebrow. */
 
 *, *::before, *::after { box-sizing:border-box; }
 html { -webkit-text-size-adjust:none; text-size-adjust:none; }
@@ -226,6 +228,12 @@ button, .videometa__row > a { display:inline-flex; align-items:center; gap:var(-
                          0 0 / var(--line-dot-spacing) var(--line-dot-page) repeat-x; }
 button:hover .more__dots, button:focus-visible .more__dots,
 a:hover .more__dots, a:focus-visible .more__dots { background:var(--sky); }
+/* A quiet action undoes or adjusts something small (remove an upload, save
+   one tick box): it is set as a link, without the line and the disc. */
+button.quiet { padding:0; font:var(--text-small); font-weight:700; color:var(--text-muted);
+               text-decoration:underline dotted var(--sky); text-decoration-thickness:var(--line-underline);
+               text-underline-offset:var(--line-underline-offset); }
+button.quiet:hover, button.quiet:focus-visible { color:var(--heading); text-decoration-style:solid; }
 .go { display:block; flex:none; overflow:visible; }
 .go circle { fill:var(--blue); }
 .go path { fill:none; stroke:var(--on-accent); stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
@@ -277,8 +285,18 @@ input[type=radio], input[type=checkbox] { flex:none; width:16px; height:16px; ma
 .step details.raw { margin-top:var(--space-16); }
 .flows { max-width:28rem; margin:var(--space-12) 0; padding:0; list-style:none; border-top:1px solid var(--border);
          font:var(--text-small); color:var(--text-muted); }
-.flows li { padding:var(--space-8) 0; border-bottom:1px solid var(--border); }
+.flows li { display:flex; align-items:baseline; justify-content:space-between; gap:var(--space-16);
+            padding:var(--space-8) 0; border-bottom:1px solid var(--border); }
+.flows li form { margin:0; }
 .flows__name { margin-right:var(--space-8); font-weight:700; color:var(--heading); }
+/* What a step or a part of it is not needed for is said in the eyebrow's
+   voice, after its heading; where a part comes from, in the small text. */
+.optional { margin-left:var(--space-12); font:var(--text-eyebrow); letter-spacing:.12em; text-transform:uppercase;
+            color:var(--text-muted); white-space:nowrap; }
+.part__from { margin-left:var(--space-4); font:var(--text-small); color:var(--text-muted); }
+.part__from a { font-weight:400; }
+.step > form > .field:first-of-type { margin-top:var(--space-12); }
+.step p.meta { max-width:44rem; }
 @media (max-width:599px) {
   .steps::before { left:calc(18px - .75px); top:18px; }
   .steps::after { left:calc(18px - var(--node-ring) / 2); }

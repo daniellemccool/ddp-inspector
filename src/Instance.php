@@ -213,7 +213,7 @@ function inst_probe(): array {
         return ['ok' => true, 'count' => $n, 'message' => "Found $n donation file(s) ✓"];
     }
     $src = inst_source_load();
-    if ($src === null) { return ['ok' => false, 'count' => null, 'message' => 'No connection details saved yet — complete step 2 first.']; }
+    if ($src === null) { return ['ok' => false, 'count' => null, 'message' => 'No connection details saved yet — fill in “Connect your donations” first.']; }
     if ($mode === 'yoda') {
         $bin = (string)cfg('gocmd_bin', 'gocmd');
         if (!inst_which($bin)) {
@@ -222,7 +222,7 @@ function inst_probe(): array {
         }
         if (!is_array($src['env'] ?? null) || (string)($src['password'] ?? '') === '') {
             return ['ok' => false, 'count' => null,
-                    'message' => 'Add your Yoda configuration (upload or paste) and data access password in step 2, then save.'];
+                    'message' => 'Add your Yoda configuration (upload or paste) and data access password under “Connect your donations”, then save.'];
         }
         // gocmd's -c takes a config DIRECTORY holding irods_environment.json;
         // the data access password goes via IRODS_USER_PASSWORD (gocmd
@@ -244,7 +244,7 @@ function inst_probe(): array {
         }
         if (stripos($r['out'], 'authentication failed') !== false) {
             return ['ok' => false, 'count' => null,
-                    'message' => 'Yoda did not accept this username and data access password. Data access passwords expire — create a new one in the Yoda portal and paste it in step 2.'];
+                    'message' => 'Yoda did not accept this username and data access password. Data access passwords expire — create a new one in the Yoda portal and paste it under “Connect your donations”.'];
         }
         if (stripos($r['out'], 'failed to establish a connection') !== false) {
             return ['ok' => false, 'count' => null,

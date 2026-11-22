@@ -22,16 +22,36 @@ if ($storageMode) { csrf_token(); }
     <p class="notice">This instance is configured by files on disk (developer mode).</p>
   <?php else: ?>
 
+  <?php
+  $ext = ' target="_blank" rel="noopener noreferrer"';
+  $optional = '<span class="optional">optional</span>';
+  ?>
   <div class="steps">
   <section class="step">
-  <h2><span class="step__num">01</span> Add your study's donation flows</h2>
-  <p class="meta">Upload the same zip files you downloaded from the flow builder, one per platform.</p>
+  <h2><span class="step__num">01</span> Describe your study <?= $optional ?></h2>
+  <p class="meta">Nothing in this step is needed to browse donations.</p>
+  <form method="post">
+    <?= csrf_field() ?><input type="hidden" name="action" value="save_name">
+    <label class="field">Study name
+      <input name="study_name" value="<?= h((string)($inst['study_name'] ?? '')) ?>"></label>
+    <button>Save<?= go_mark() ?></button>
+  </form>
+
+  <h3>Donation flows <span class="part__from">from the <a href="https://datadonation.eu/software/script-selector/"<?= $ext ?>>script selector</a></span> <?= $optional ?></h3>
+  <p class="meta">What was collected: the tables and what each variable means. Upload the zip exactly as the script selector downloaded it, one per platform.</p>
   <?php if ($flows): ?>
     <ul class="flows">
     <?php foreach ($flows as $slug => $doc): ?>
-      <li><span class="flows__name"><?= h($doc['platform_title']) ?></span> <?= count($doc['sections']) ?> data tables</li>
+      <li><span><span class="flows__name"><?= h($doc['platform_title']) ?></span> <?= count($doc['sections']) ?> data tables</span>
+        <form method="post">
+          <?= csrf_field() ?><input type="hidden" name="action" value="remove_flow">
+          <input type="hidden" name="slug" value="<?= h((string)$slug) ?>">
+          <button class="quiet">Remove</button>
+        </form></li>
     <?php endforeach; ?>
     </ul>
+  <?php else: ?>
+    <p class="meta">Without a flow, tables keep their raw names and have no descriptions.</p>
   <?php endif; ?>
   <form method="post" enctype="multipart/form-data" class="toolbar">
     <?= csrf_field() ?><input type="hidden" name="action" value="upload_flow">
@@ -41,11 +61,9 @@ if ($storageMode) { csrf_token(); }
   </section>
 
   <section class="step">
-  <h2><span class="step__num">02</span> About your study</h2>
+  <h2><span class="step__num">02</span> Connect your donations</h2>
   <form method="post" enctype="multipart/form-data">
     <?= csrf_field() ?><input type="hidden" name="action" value="save_source">
-    <label class="field">Study name
-      <input name="study_name" value="<?= h((string)($inst['study_name'] ?? '')) ?>"></label>
     <h3>Where are your donations stored?</h3>
     <div class="choices">
     <div class="choice">
@@ -96,17 +114,21 @@ if ($storageMode) { csrf_token(); }
       This study has an analysis database</label></p>
     <label class="field">Path in the study's folder
       <input name="analysis_db_path" value="<?= h((string)($adb['path'] ?? 'analysis/out/analysis.sqlite')) ?>"></label>
-    <p><label class="check"><input type="checkbox" name="cadence" value="daily" <?= ($inst['cadence'] ?? '') === 'daily' ? 'checked' : '' ?>>
-      Check for new donations automatically every day</label></p>
     <button>Save<?= go_mark() ?></button>
   </form>
   </section>
 
   <section class="step">
-  <h2><span class="step__num">03</span> Check &amp; fetch</h2>
+  <h2><span class="step__num">03</span> Fetch</h2>
   <form method="post">
     <?= csrf_field() ?><input type="hidden" name="action" value="check_fetch">
     <button>Check connection and fetch donations<?= go_mark() ?></button>
+  </form>
+  <form method="post" class="toolbar">
+    <?= csrf_field() ?><input type="hidden" name="action" value="save_cadence">
+    <label class="check"><input type="checkbox" name="cadence" value="daily" <?= ($inst['cadence'] ?? '') === 'daily' ? 'checked' : '' ?>>
+      Check for new donations automatically every day</label>
+    <button class="quiet">Save</button>
   </form>
   <?php if ($status['phase'] !== 'idle'): ?>
     <p class="<?= $status['phase'] === 'error' ? 'warn' : 'notice' ?>">

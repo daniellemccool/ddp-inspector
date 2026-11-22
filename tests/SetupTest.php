@@ -171,6 +171,18 @@ check(!str_contains($html, '>pw<'), 'password never echoed');
 check(str_contains($html, 'TikTok'), 'uploaded flow listed');
 check(str_contains($html, 'did not accept your username'), 'status message rendered');
 check(str_contains($html, 'Technical log'), 'log details present');
+// Three steps that read as one path: describe the study, connect the
+// donations, fetch. The name and the daily check each have their own form.
+$p1 = strpos($html, 'Describe your study'); $p2 = strpos($html, 'Connect your donations'); $p3 = strpos($html, '>03</span> Fetch');
+check($p1 !== false && $p2 !== false && $p3 !== false && $p1 < $p2 && $p2 < $p3, 'three steps in order');
+check(!str_contains($html, 'flow builder'), 'the page says script selector, not flow builder');
+check(str_contains($html, 'href="https://datadonation.eu/software/script-selector/" target="_blank" rel="noopener noreferrer"'), 'script selector linked');
+check(substr_count($html, 'class="optional"') >= 2, 'the step and the flows part are marked optional');
+check(preg_match('~name="action" value="remove_flow">\s*<input type="hidden" name="slug" value="tiktok">~', $html) === 1, 'each flow has a Remove form');
+check(preg_match('~value="save_name">.*name="study_name".*value="save_source">~s', $html) === 1, 'the name has its own form, before the source form');
+check(preg_match('~value="save_source">(?:(?!</form>).)*name="(study_name|cadence)"~s', $html) === 0, 'the source form holds neither name nor daily check');
+check(preg_match('~value="save_cadence">(?:(?!</form>).)*name="cadence"~s', $html) === 1, 'the daily check has its own form');
+check(!str_contains($html, 'Without a flow'), 'no "without a flow" line while a flow is stored');
 
 // A flow uploaded by mistake can be removed; the message names what went.
 $r = inst_handle_setup_post(['action' => 'remove_flow', 'csrf' => csrf_token(), 'slug' => 'tiktok'], []);

@@ -194,6 +194,22 @@ touch "${ROOT}/state/refresh-requested"
 check "unconfigured+flag: exits 0"           "${TMP}/ddp-refresh.sh"
 check "unconfigured+flag: flag consumed"     bash -c "! test -e '${ROOT}/state/refresh-requested'"
 
+# ---- 1c. instance without a source: named or described, donations not connected
+# Setup saves the study name (and a study setup) on its own, so instance.json
+# can exist before "Connect your donations" is filled in. A timer tick then
+# does nothing; a requested run says which part of Setup is missing.
+cat > "${ROOT}/config/instance.json" <<'J'
+{"study_name":"example"}
+J
+check "no source, no flag: exits 0"          "${TMP}/ddp-refresh.sh"
+check "no source, no flag: no status written" bash -c "! test -e '${ROOT}/state/refresh-status.json'"
+touch "${ROOT}/state/refresh-requested"
+"${TMP}/ddp-refresh.sh" || true
+check "no source + flag: phase error"        bash -c "[ \"\$(jq -r .phase '${ROOT}/state/refresh-status.json')\" = error ]"
+check "no source + flag: names the step"     bash -c "jq -r .message '${ROOT}/state/refresh-status.json' | grep -q 'Connect your donations'"
+check "no source + flag: flag consumed"      bash -c "! test -e '${ROOT}/state/refresh-requested'"
+rm -f "${ROOT}/state/refresh-status.json"
+
 # ---- 2. yoda happy path -------------------------------------------------------
 cat > "${ROOT}/config/instance.json" <<'J'
 {"study_name":"example","source_mode":"yoda","local_path":null,"cadence":"off","default_n":15}
