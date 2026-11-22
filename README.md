@@ -4,13 +4,25 @@ A read-only viewer for DDP (Data Donation Package) extracts, generalized across
 donated platforms: participant → platform → tables. Renders each table faithfully —
 with scope (per-table row counts, date ranges), seeded samples, and an optional
 transcript view — so a researcher can verify that donations match expectations.
-Table titles and descriptions are drawn from the donation flow's own export docs
+Table titles and descriptions are drawn from the donation flow's own documentation
 when available, falling back to the raw table names.
+
+A **Study** page shows the study's documentation, from two optional uploads:
+- the **study setup**, exported from [Next](https://next.eyra.co/) (study page,
+  ⋮ → Export): what participants saw: information pages, consent, instructions
+  and tasks;
+- the **donation flow** from the
+  [script selector](https://datadonation.eu/software/script-selector/), one per
+  platform: what was collected: the tables and what each variable means.
+
+The **donations** themselves (what participants gave) come from Research Drive,
+Yoda or a folder on the workspace.
 
 Two ways to run it:
 - **Provisioned (storage mode)** — point `config.php` at the inspector's namespace
-  dir on a storage volume; a setup wizard at `/setup.php` walks through connecting
-  the study (gocmd/rclone) and manages refresh cadence from there.
+  dir on a storage volume; Setup at `/setup.php` has three steps: describe the
+  study (its name, the study setup, the donation flows; all optional), connect
+  the donations (gocmd/rclone), and fetch (now, or every day).
 - **Dev mode (unchanged)** — point `config.php` at a plain DDP JSON directory, as
   before; see `./run-dev.sh` and `examples/` below.
 
@@ -20,7 +32,8 @@ extra content to table rows without touching the core render path.
 Companion to the `ddp-transcribe` pipeline; **not** part of it. See the design spec
 in `docs/superpowers/specs/` and the plan in `docs/superpowers/plans/`.
 
-Requires **PHP ≥ 8.1** (uses `array_is_list`).
+Requires **PHP ≥ 8.1** (uses `array_is_list`), with the `sqlite3` and `zip`
+extensions (`zip` reads the study setup; the tests need it too).
 
 ## Run locally
 ```bash
