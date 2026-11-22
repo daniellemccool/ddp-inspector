@@ -4,14 +4,14 @@ function inst_root(): ?string {
     return (is_string($r) && $r !== '') ? rtrim($r, '/') : null;
 }
 
-/** @return array{config:?string, flows:?string, inbox:?string, analyses:?string, state:?string, cache:?string} */
+/** @return array{config:?string, flows:?string, setup:?string, inbox:?string, analyses:?string, state:?string, cache:?string} */
 function inst_paths(): array {
     $root = inst_root();
     if ($root === null) {
-        return ['config' => null, 'flows' => null, 'inbox' => null,
+        return ['config' => null, 'flows' => null, 'setup' => null, 'inbox' => null,
                 'analyses' => null, 'state' => null, 'cache' => null];
     }
-    return ['config' => "$root/config", 'flows' => "$root/config/flows",
+    return ['config' => "$root/config", 'flows' => "$root/config/flows", 'setup' => "$root/config/study-setup",
             'inbox' => "$root/data/inbox", 'analyses' => "$root/data/analyses",
             'state' => "$root/state", 'cache' => "$root/cache"];
 }
