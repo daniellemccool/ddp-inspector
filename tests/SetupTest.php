@@ -184,6 +184,17 @@ check(preg_match('~value="save_source">(?:(?!</form>).)*name="(study_name|cadenc
 check(preg_match('~value="save_cadence">(?:(?!</form>).)*name="cadence"~s', $html) === 1, 'the daily check has its own form');
 check(!str_contains($html, 'Without a flow'), 'no "without a flow" line while a flow is stored');
 
+// A body PHP refuses (over post_max_size) arrives as a POST with nothing in
+// it. nginx lets through twice PHP's limit so that this, and not nginx's
+// bare 413 page, is what an over-size upload usually meets.
+$big = ['REQUEST_METHOD' => 'POST', 'CONTENT_LENGTH' => (string)(70 * 1024 * 1024)];
+check(str_contains((string)inst_post_too_large($big, [], [], '64M'), '64 MB'), 'a refused body is reported as too large, with the limit');
+eq(inst_post_too_large($big, ['action' => 'x'], [], '64M'), null, 'a post that arrived is not too large');
+eq(inst_post_too_large(['REQUEST_METHOD' => 'POST', 'CONTENT_LENGTH' => '100'], [], [], '64M'), null, 'a small empty post is not too large');
+eq(inst_post_too_large(['REQUEST_METHOD' => 'GET'], [], [], '64M'), null, 'GET is never too large');
+check(str_contains((string)inst_post_too_large(['REQUEST_METHOD' => 'POST', 'CONTENT_LENGTH' => '3000000'], [], [], '2097152'), '2 MB'), 'a limit given in bytes is reported in MB');
+eq(inst_post_too_large($big, [], [], '0'), null, 'post_max_size 0 means no limit');
+
 // A flow uploaded by mistake can be removed; the message names what went.
 $r = inst_handle_setup_post(['action' => 'remove_flow', 'csrf' => csrf_token(), 'slug' => 'tiktok'], []);
 eq($r['flash'][0]['kind'], 'ok', 'flow removal accepted');

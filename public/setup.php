@@ -3,7 +3,11 @@ require_once __DIR__ . '/../src/bootstrap.php';
 
 $flash = [];
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && inst_root() !== null) {
-    $flash = inst_handle_setup_post($_POST, $_FILES)['flash'];
+    // An upload over PHP's limit arrives empty: say so, instead of letting
+    // the handler report an expired form.
+    $tooLarge = inst_post_too_large($_SERVER, $_POST, $_FILES, (string)ini_get('post_max_size'));
+    $flash = $tooLarge !== null ? [['kind' => 'error', 'text' => $tooLarge]]
+                                : inst_handle_setup_post($_POST, $_FILES)['flash'];
 }
 $storageMode = inst_root() !== null;
 $flows = $storageMode ? flows_load_all() : [];
