@@ -9,6 +9,7 @@
       - php-fpm
       - php-cli
       - php-sqlite3
+      - php-zip
       - acl
       - jq
       - rsync

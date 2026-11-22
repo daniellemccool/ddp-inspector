@@ -84,6 +84,8 @@ function flows_ingest_upload(string $zipPath, string $flowsDir): array {
     $fail = fn(string $msg) => ['ok' => false, 'message' => $msg, 'slug' => null, 'table_count' => null];
     if (!is_file($zipPath)) { return $fail('No file arrived — please choose the zip you downloaded from the script selector and try again.'); }
     if (filesize($zipPath) > 64 * 1024 * 1024) { return $fail('That file is larger than 64 MB — donation flows are much smaller. Is it the right zip?'); }
+    // The two uploads in Setup are easy to mix up: say where this one goes.
+    if (setup_zip_is_study_setup($zipPath)) { return $fail('That is a study setup from Next — upload it under “Study setup”.'); }
     $reading = $zipPath;
     if (!preg_match('/\.zip$/i', $zipPath)) { $reading = $zipPath . '.zip'; if (!@copy($zipPath, $reading)) { return $fail('Could not read the uploaded file — please try again.'); } }
     try {

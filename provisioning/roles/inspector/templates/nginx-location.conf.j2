@@ -6,7 +6,10 @@ location {{ inspector_base_path }}/ {
     error_page 401 = @custom_401;
     auth_request /validate;                       # SRAM login, CO members only
     auth_request_set $username $upstream_http_username;
-    client_max_body_size {{ inspector_upload_max }};
+    # Twice PHP's own limit (inspector_upload_max): an upload somewhat over
+    # that limit then reaches the app, which says so, instead of meeting
+    # nginx's bare 413 page.
+    client_max_body_size {{ inspector_body_max }};
     alias {{ inspector_install_dir }}/public/;
     index index.php;
     location ~ ^{{ inspector_base_path }}/(.+\.php)$ {

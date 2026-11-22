@@ -42,8 +42,12 @@
     # rclone release (static binary; WebDAV client for RD share links).
     rclone_version: "v1.67.0"
     rclone_url: "https://downloads.rclone.org/{{ rclone_version }}/rclone-{{ rclone_version }}-linux-amd64.zip"
-    # Upload ceiling for flow-export zips (nginx + PHP must agree).
+    # Upload ceiling for the zips Setup takes (donation flows, the study
+    # setup): PHP's limit, and what the app tells the researcher.
     inspector_upload_max: "64m"
+    # nginx lets through twice that, so an upload somewhat over the limit
+    # reaches the app and gets its message rather than nginx's bare 413.
+    inspector_body_max: "128m"
   roles:
     - role: preflight
     - role: inspector

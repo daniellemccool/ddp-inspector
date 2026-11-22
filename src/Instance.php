@@ -4,14 +4,14 @@ function inst_root(): ?string {
     return (is_string($r) && $r !== '') ? rtrim($r, '/') : null;
 }
 
-/** @return array{config:?string, flows:?string, inbox:?string, analyses:?string, state:?string, cache:?string} */
+/** @return array{config:?string, flows:?string, setup:?string, inbox:?string, analyses:?string, state:?string, cache:?string} */
 function inst_paths(): array {
     $root = inst_root();
     if ($root === null) {
-        return ['config' => null, 'flows' => null, 'inbox' => null,
+        return ['config' => null, 'flows' => null, 'setup' => null, 'inbox' => null,
                 'analyses' => null, 'state' => null, 'cache' => null];
     }
-    return ['config' => "$root/config", 'flows' => "$root/config/flows",
+    return ['config' => "$root/config", 'flows' => "$root/config/flows", 'setup' => "$root/config/study-setup",
             'inbox' => "$root/data/inbox", 'analyses' => "$root/data/analyses",
             'state' => "$root/state", 'cache' => "$root/cache"];
 }
@@ -295,6 +295,28 @@ function inst_valid_relative_path(string $p): bool {
     return !in_array('..', explode('/', $p), true);
 }
 
+/** A PHP size setting ("64M", "2G", "2097152") in bytes; 0 = no limit. */
+function inst_ini_bytes(string $v): int {
+    $v = trim($v);
+    $n = (int)$v;
+    return match (strtoupper(substr($v, -1))) {
+        'G' => $n * 1024 * 1024 * 1024, 'M' => $n * 1024 * 1024, 'K' => $n * 1024, default => $n,
+    };
+}
+
+/**
+ * The message for an upload PHP refused for its size, or null. PHP drops a
+ * body over post_max_size before the page runs: the POST arrives with no
+ * fields and no files, which would otherwise read as an expired form.
+ * $postMax is ini_get('post_max_size').
+ */
+function inst_post_too_large(array $server, array $post, array $files, string $postMax): ?string {
+    if (($server['REQUEST_METHOD'] ?? '') !== 'POST' || $post !== [] || $files !== []) { return null; }
+    $limit = inst_ini_bytes($postMax);
+    if ($limit <= 0 || (int)($server['CONTENT_LENGTH'] ?? 0) <= $limit) { return null; }
+    return 'That file is larger than this workspace accepts (' . (int)round($limit / (1024 * 1024)) . ' MB).';
+}
+
 /** @return array{flash: list<array{kind:string, text:string}>} */
 function inst_handle_setup_post(array $post, array $files): array {
     $flash = fn(string $kind, string $text) => ['flash' => [['kind' => $kind, 'text' => $text]]];
@@ -311,6 +333,27 @@ function inst_handle_setup_post(array $post, array $files): array {
         if ($flows === null) { return $flash('error', 'This instance has no storage volume configured — contact whoever set up this workspace.'); }
         $r = flows_ingest_upload($f['tmp_name'], $flows);
         return $flash($r['ok'] ? 'ok' : 'error', $r['message']);
+    }
+    if ($action === 'upload_setup') {
+        $f = $files['setup_zip'] ?? null;
+        if (!is_array($f) || ($f['error'] ?? 1) !== 0 || !is_string($f['tmp_name'] ?? null)) {
+            return $flash('error', 'The upload did not arrive — please choose the zip and try again.');
+        }
+        $dest = inst_paths()['setup'];
+        if ($dest === null) { return $flash('error', 'This instance has no storage volume configured — contact whoever set up this workspace.'); }
+        $r = setup_ingest_upload($f['tmp_name'], $dest, is_string($f['name'] ?? null) ? $f['name'] : '');
+        // The study setup names the study when nothing has: an empty name is
+        // filled from it, a name someone typed is never overwritten.
+        if ($r['ok'] && $r['name'] !== null) {
+            $inst = inst_load() ?? [];
+            if (trim((string)($inst['study_name'] ?? '')) === '') { $inst['study_name'] = $r['name']; inst_save($inst); }
+        }
+        return $flash($r['ok'] ? 'ok' : 'error', $r['message']);
+    }
+    if ($action === 'remove_setup') {
+        $dest = inst_paths()['setup'];
+        if ($dest === null || !setup_remove($dest)) { return $flash('error', 'There is no study setup to remove.'); }
+        return $flash('ok', 'Removed the study setup — upload it again to restore it.');
     }
     if ($action === 'remove_flow') {
         $flows = inst_paths()['flows'];

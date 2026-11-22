@@ -153,7 +153,8 @@ check(!is_dir("$flowsDir/bombplatform"), 'nothing installed for the rejected bom
 // documentation.txt and build-meta.json are ever written. Pin the OUTCOME, not the
 // mechanism: no file may ever land outside the flows dir, regardless of whether
 // ingestion itself succeeds or fails. Crafting such a zip needs ZipArchive
-// (php-zip), a test-only dependency: the app itself reads zips with PharData.
+// (php-zip). The flow upload reads zips with PharData; php-zip is the app's
+// dependency for the study setup upload, so the SKIP below is for an old install.
 if (!class_exists('ZipArchive')) {
     fwrite(STDERR, "SKIP: traversal-zip checks need the php-zip extension (ZipArchive)\n");
 } else {
