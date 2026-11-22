@@ -352,22 +352,26 @@ function inst_handle_setup_post(array $post, array $files): array {
     }
     if ($action === 'remove_setup') {
         $dest = inst_paths()['setup'];
-        // Already gone (a second click on Remove) is not an error.
+        // Not there after the attempt (a second click on Remove, even one that
+        // arrived while the first was still running) is not an error.
+        if ($dest !== null && setup_remove($dest)) { return $flash('ok', 'Removed the study setup — upload it again to restore it.'); }
+        clearstatcache();
         if ($dest === null || !is_dir($dest)) { return $flash('ok', 'The study setup was already removed.'); }
-        if (!setup_remove($dest)) { return $flash('error', 'The study setup could not be removed — try again in a moment.'); }
-        return $flash('ok', 'Removed the study setup — upload it again to restore it.');
+        return $flash('error', 'The study setup could not be removed — try again in a moment.');
     }
     if ($action === 'remove_flow') {
         $flows = inst_paths()['flows'];
         $slug = (string)($post['slug'] ?? '');
         $title = (string)(flows_load_all()[$slug]['platform_title'] ?? $slug);
-        // A plain name that is simply not there: already removed (a second
-        // click on Remove), not an error.
+        if ($flows !== null && flows_remove($flows, $slug)) { return $flash('ok', "Removed the $title flow — upload it again to restore it."); }
+        // A plain name that is not there after the attempt: already removed (a
+        // second click on Remove, even one that arrived while the first was
+        // still running), not an error.
+        clearstatcache();
         if ($flows !== null && preg_match('/^[a-z0-9]+\z/', $slug) === 1 && !is_dir("$flows/$slug")) {
             return $flash('ok', 'That flow was already removed.');
         }
-        if ($flows === null || !flows_remove($flows, $slug)) { return $flash('error', 'That flow could not be removed.'); }
-        return $flash('ok', "Removed the $title flow — upload it again to restore it.");
+        return $flash('error', 'That flow could not be removed.');
     }
     $cantSave = 'Could not save — the storage volume may be full or read-only.';
     // The study name and the daily check each have their own small form: one

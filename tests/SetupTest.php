@@ -308,7 +308,7 @@ foreach ($partIds as $id) {
     $p = $partHtml($html, $id);
     check(str_contains($p, '>Change<') && str_contains($p, '>Close<'), "$id carries the words for its other states");
     preg_match_all('~<form[^>]*>~', $p, $forms);
-    check($forms[0] !== [] && array_filter($forms[0], fn($f) => !str_contains($f, 'action="setup.php#' . $id . '"')) === [], "every form in $id posts back to that line");
+    check($forms[0] !== [] && array_filter($forms[0], fn($f) => !str_contains($f, '#' . $id . '"')) === [], "every form in $id posts back to that line");
 }
 check(str_contains($html, 'href="https://next.eyra.co/" target="_blank" rel="noopener noreferrer"'), 'Next is linked');
 check(str_contains($html, 'href="https://datadonation.eu/software/script-selector/" target="_blank" rel="noopener noreferrer"'), 'the script selector is linked');
@@ -370,6 +370,53 @@ foreach ($partIds as $id) { check(($partTag($html, $id)[1] ?? null) === false, "
 $html = render_setup_post(['action' => 'save_cadence', 'cadence' => 'daily']);
 check(str_contains($aboveSteps($html), 'new donations are checked every day'), 'a step 03 message is at the top');
 foreach ($partIds as $id) { check(($partTag($html, $id)[1] ?? null) === false, "a step 03 action leaves $id closed"); }
+
+// Every form says where it posts. A form without an action posts to the
+// current address, which after a step 01 action still carries #part-…: a
+// step 02 or 03 message would then appear at the top with the page scrolled
+// away from it.
+$_POST = [];
+$html = render_page('setup.php', []);
+preg_match_all('~<form[^>]*>~', $html, $allForms);
+check(count($allForms[0]) >= 6, 'the page has its forms');
+foreach ($allForms[0] as $formTag) { check(preg_match('~ action="setup\.php(\?part=(name|setup|flows)#part-\2)?"~', $formTag) === 1, 'a form names its target: ' . $formTag); }
+$outside = preg_replace('~<details class="part.*?</details>~s', '', $html);
+preg_match_all('~<form[^>]*>~', (string)$outside, $outerForms);
+check(count($outerForms[0]) >= 3 && array_filter($outerForms[0], fn($f) => !str_contains($f, ' action="setup.php"')) === [], 'forms outside step 01 post to the plain address');
+foreach (['name', 'setup', 'flows'] as $short) {
+    preg_match_all('~<form[^>]*>~', $partHtml($html, "part-$short"), $inner);
+    check(array_filter($inner[0], fn($f) => !str_contains($f, ' action="setup.php?part=' . $short . '#part-' . $short . '"')) === [], "forms in the $short line carry the line in the address");
+}
+// An upload PHP refuses for its size arrives with no fields at all: the line
+// is known only from the address, and the message must be inside it.
+$_GET = ['part' => 'flows']; $_POST = []; $_FILES = []; $_SERVER['REQUEST_METHOD'] = 'POST';
+$_SERVER['CONTENT_LENGTH'] = (string)(inst_ini_bytes((string)ini_get('post_max_size')) + 1000);
+ob_start(); include __DIR__ . '/../public/setup.php'; $html = (string)ob_get_clean();
+unset($_SERVER['CONTENT_LENGTH']); $_GET = []; $_SERVER['REQUEST_METHOD'] = 'GET';
+eq($partTag($html, 'part-flows')[1] ?? null, true, 'an over-size upload reopens the line it came from');
+check(preg_match('~<p class="warn">That file is larger than this workspace accepts~', $partHtml($html, 'part-flows')) === 1, 'with the too-large message inside it');
+check(!str_contains($aboveSteps($html), 'class="warn"'), 'and not at the top');
+// A line named in the address that does not exist opens nothing.
+$_GET = ['part' => 'nonsense"><b>']; $_POST = ['action' => 'nonsense', 'csrf' => csrf_token()]; $_SERVER['REQUEST_METHOD'] = 'POST';
+ob_start(); include __DIR__ . '/../public/setup.php'; $html = (string)ob_get_clean();
+$_GET = []; $_POST = []; $_SERVER['REQUEST_METHOD'] = 'GET';
+check(preg_match('~<p class="warn">Unknown action\.</p>~', $aboveSteps($html)) === 1 && !str_contains($html, 'nonsense"><b>'), 'an unknown line in the address is ignored');
+// An expired form on a line: the message is inside that line (the page scrolls there).
+$_GET = []; $_POST = ['action' => 'upload_flow', 'csrf' => 'stale']; $_FILES = []; $_SERVER['REQUEST_METHOD'] = 'POST';
+ob_start(); include __DIR__ . '/../public/setup.php'; $html = (string)ob_get_clean();
+$_POST = []; $_SERVER['REQUEST_METHOD'] = 'GET';
+check(str_contains($partHtml($html, 'part-flows'), 'That form has expired') && ($partTag($html, 'part-flows')[1] ?? null) === true, 'an expired form on a line shows its message in that line');
+// With a base path (production serves the app under /inspector) the targets follow it.
+$GLOBALS['__cfg']['base_path'] = '/inspector';
+$_POST = [];
+$html = render_page('setup.php', []);
+check(str_contains($html, ' action="/inspector/setup.php?part=flows#part-flows"') && str_contains($html, ' action="/inspector/setup.php"'), 'form targets follow the base path');
+$GLOBALS['__cfg']['base_path'] = '';
+// A study setup without a crate has no export date: its status says when it was uploaded.
+make_setup_zip($slSetup, ['example/next-metadata.json' => (string)json_encode(example_setup_meta())]);
+$html = render_setup_post(['action' => 'upload_setup'], ['setup_zip' => ['tmp_name' => $slSetup, 'error' => 0, 'name' => 'x.zip']]);
+check(preg_match('~<span class="part__when">uploaded \d{1,2} \w{3} \d{4}</span>~', $partHtml($html, 'part-setup')) === 1, 'without an export date the status says when it was uploaded');
+check(!str_contains($html, '<span class="part__when"></span>'), 'no empty date is written');
 
 // A name with markup in it is escaped in the status line too.
 $html = render_setup_post(['action' => 'save_name', 'study_name' => '<b>x</b>']);

@@ -293,8 +293,8 @@ input[type=radio], input[type=checkbox] { flex:none; width:16px; height:16px; ma
             padding:var(--space-8) 0; border-bottom:1px solid var(--border); }
 .flows li form { margin:0; }
 .flows__name { margin-right:var(--space-8); font-weight:700; color:var(--heading); }
-/* What a step or a part of it is not needed for is said in the eyebrow's
-   voice, after its heading; where a part comes from, in the small text. */
+/* What a step is not needed for is said in the eyebrow's voice, after its
+   heading. */
 .optional { margin-left:var(--space-12); font:var(--text-eyebrow); letter-spacing:.12em; text-transform:uppercase;
             color:var(--text-muted); white-space:nowrap; }
 /* The first step's parts: one line each (name, status, one word), opening
@@ -327,6 +327,9 @@ input[type=radio], input[type=checkbox] { flex:none; width:16px; height:16px; ma
 .part__body .flows { margin:var(--space-12) 0; }
 .part__body .toolbar { margin:var(--space-12) 0 0; }
 .part__body .field { flex:1 1 14rem; margin:0; }
+/* A field with its label above it: the action sits level with the field. */
+.toolbar--field { align-items:flex-end; }
+.toolbar--field button { margin-bottom:4px; }
 @media (max-width:719px) { .part__body { margin-left:0; } }
 @media (max-width:599px) {
   .part::before { left:calc(18px - 52px - var(--node-edge) / 2); }
