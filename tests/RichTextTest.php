@@ -20,7 +20,14 @@ $cases = [
   '<a href="https://example.org/?a=1&amp;b=2">l</a>' => '<a href="https://example.org/?a=1&amp;b=2" target="_blank" rel="noopener noreferrer">l</a>',
   '<a title="><img src=x onerror=alert(1)>">t</a>' => '"&gt;t',   // tags end at the first >, quotes or not
   '<img src="x" onerror="alert(1)"><figure>cap</figure>' => 'cap',
-  '<ul><li>a<li>b' => '<ul><li>a<li>b</li></li></ul>',            // Review Focus 2: closed at the end
+  '<ul><li>a<li>b' => '<ul><li>a</li><li>b</li></ul>',            // Review Focus 2: closed at the end; a new item ends the open one
+  // A list item is only written inside a list: a bare one would end the
+  // page's own list item around this text.
+  '<li>x</li>' => 'x',
+  '<p>a</p><li>b</li><p>c</p>' => '<p>a</p>b<p>c</p>',
+  '<ol><li>a<ul><li>b</li><li>c</li></ul></li><li>d</li></ol>' => '<ol><li>a<ul><li>b</li><li>c</li></ul></li><li>d</li></ol>',
+  '<ul><li><p>a</p><li>b</ul>' => '<ul><li><p>a</p></li><li>b</li></ul>',
+  '<ul><li>a</li></ul></li></ul>b' => '<ul><li>a</li></ul>b',
   '<strong>bold</p></div>after' => '<strong>boldafter</strong>',   // Review Focus 2: stray closers dropped
   '1 < 2 > 0 &amp; &lt;b&gt;' => '1 &lt; 2 &gt; 0 &amp; &lt;b&gt;',
   '<pre><em>note</em> <a href="https://example.org">x</a></pre>' => '<pre><em>note</em> <a href="https://example.org" target="_blank" rel="noopener noreferrer">x</a></pre>',
@@ -47,3 +54,20 @@ foreach (array_keys($cases) as $in) {
         eq(preg_match_all('~<' . $t . '[ >]~', $out), substr_count($out, '</' . $t . '>'), 'balanced <' . $t . '>: ' . $in);
     }
 }
+
+// Long runs of whitespace and large inputs: nothing already written is ever
+// lost, and the work grows with the input, not with its square.
+$spaces = str_repeat(' ', 9000);
+$out = rich_html('<h1>Consent</h1><p>You agree to A, B and C.</p><pre>' . $spaces . '</pre><p>Last line.</p>');
+check(str_starts_with($out, '<h4>Consent</h4><p>You agree to A, B and C.</p><pre>') && str_ends_with($out, '</pre><p>Last line.</p>'),
+      'a long run of spaces loses nothing written before it');
+$out = rich_html('<ol><li><p>' . $spaces . 'x</p></li></ol>');
+check(str_starts_with($out, '<ol><li><p>') && str_ends_with($out, 'x</p></li></ol>'), 'a long run of spaces inside a list item keeps the list');
+eq(rich_html('<div>a' . str_repeat('<br>', 9000) . str_repeat('&nbsp; ', 3000) . '</div><div>b</div>'), '<p>a</p><p>b</p>', 'a long tail of blank lines is trimmed');
+eq(rich_html("<div>a\u{a0}\u{a0} </div>"), '<p>a</p>', 'no-break spaces at a paragraph\'s end are trimmed');
+eq(rich_html('<!--' . str_repeat('x', 200000) . '--><p>kept</p>'), '<p>kept</p>', 'a very long comment is removed, the rest kept');
+$t0 = microtime(true);
+$out = rich_html(str_repeat('<div>A paragraph of text.<br></div>', 20000));
+$took = microtime(true) - $t0;
+eq(substr_count($out, '<p>A paragraph of text.</p>'), 20000, 'twenty thousand paragraphs all come out');
+check($took < 2.0, 'twenty thousand paragraphs take well under two seconds (took ' . round($took, 2) . ' s)');

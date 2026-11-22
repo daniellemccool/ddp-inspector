@@ -20,7 +20,11 @@ if ($studyName === '' && $ov !== null) { $studyName = $ov['name']; }
 
 $ext = ' target="_blank" rel="noopener noreferrer"';
 $settings = '<a href="' . h(url('setup.php')) . '">Settings</a>';
-$asset = fn(string $name): string => h(url('asset.php?f=' . rawurlencode($name)));
+// A packaged file's address carries a stamp of the upload: Next reuses file
+// names (logo.png, document-1.pdf) and the browser may keep a file for an
+// hour, so a setup uploaded again must not show the previous one's files.
+$assetStamp = substr(md5(setup_text($setup['uploaded']['uploaded_at'] ?? null)), 0, 8);
+$asset = fn(string $name): string => h(url('asset.php?f=' . rawurlencode($name) . '&v=' . $assetStamp));
 $missingFile = '<span class="meta">not included in the export</span>';
 
 // The parts of the study setup that are there, in the order a participant met them.

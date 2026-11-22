@@ -358,7 +358,10 @@ function setup_overview(array $setup): array {
         if ($name === '') { continue; }
         [$contact] = $follow($person['contactPoint'] ?? null);
         $email = $contact !== null && str_starts_with($contact, 'mailto:') ? substr($contact, 7) : '';
-        $authors[] = ['name' => $name, 'email' => filter_var($email, FILTER_VALIDATE_EMAIL) !== false ? $email : ''];
+        // Only a plain address becomes a mail link: nothing with "?", "%" or ","
+        // in it, which could pre-fill a message or add recipients.
+        $plain = preg_match('/^[A-Za-z0-9._+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$/D', $email) === 1;
+        $authors[] = ['name' => $name, 'email' => $plain ? $email : ''];
     }
     // A licence or publisher: its name, and its id as a link when that is a web address.
     $entity = function (mixed $ref) use ($follow): ?array {

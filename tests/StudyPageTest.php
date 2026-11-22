@@ -123,17 +123,27 @@ check(preg_match('~<a href="https://creativecommons\.org/licenses/by/4\.0/"[^>]*
 check(str_contains($html, 'Shown to participants as “News on a platform”'), 'the participant-facing title, when it differs');
 check(str_contains($html, 'A subtitle'), 'the subtitle');
 check(str_contains($html, 'English'), 'the language by name');
-check(preg_match('~<img[^>]* src="asset\.php\?f=logo\.png"~', $html) === 1, 'the logo is shown');
+check(preg_match('~<img[^>]* src="asset\.php\?f=logo\.png&amp;v=[0-9a-f]{8}"~', $html) === 1, 'the logo is shown');
 // Files and tasks.
-check(str_contains($html, 'href="asset.php?f=privacy-statement.pdf"'), 'the privacy statement links to its file');
-check(preg_match('~<a href="asset\.php\?f=document-1\.pdf"[^>]*>guide\.pdf</a>~', $html) === 1, 'the document task opens its file, labelled with the original name');
+check(preg_match('~href="asset\.php\?f=privacy-statement\.pdf&amp;v=[0-9a-f]{8}"~', $html) === 1, 'the privacy statement links to its file');
+check(preg_match('~<a href="asset\.php\?f=document-1\.pdf&amp;v=[0-9a-f]{8}"[^>]*>guide\.pdf</a>~', $html) === 1, 'the document task opens its file, labelled with the original name');
 check(str_contains($html, 'dd-example.zip'), 'the donation task shows the script the study ran');
 check(str_contains($html, 'href="https://survey.example/s/1"'), 'the questionnaire shows its link');
 foreach (['Download manual', 'Step by step', 'On your phone', 'Open the app', 'Request the data', '<p>Tap <strong>Settings</strong>.</p>'] as $part) {
     check(str_contains($html, $part), "the manual shows: $part");
 }
-check(preg_match('~<img[^>]* src="asset\.php\?f=instruction-step-4-1-1\.png"~', $html) === 1, 'a stored screenshot is shown');
-check(!str_contains($html, 'instruction-step-4-1-2.png"'), 'a screenshot that is not stored is not linked');
+check(preg_match('~<img[^>]* src="asset\.php\?f=instruction-step-4-1-1\.png&amp;v=[0-9a-f]{8}"~', $html) === 1, 'a stored screenshot is shown');
+check(!str_contains($html, 'f=instruction-step-4-1-2.png'), 'a screenshot that is not stored is not linked');
+// A file's address carries the upload's stamp: Next reuses names (logo.png,
+// document-1.pdf), and a re-uploaded setup must not show the old file from cache.
+preg_match('~f=logo\.png&amp;v=([0-9a-f]{8})~', $html, $v1);
+$meta0 = inst_read_json("$spDest/upload-meta.json"); $meta0['uploaded_at'] = '2030-01-01T00:00:00+00:00';
+inst_write_json_atomic("$spDest/upload-meta.json", $meta0);
+[$html2] = $renderStudy();
+preg_match('~f=logo\.png&amp;v=([0-9a-f]{8})~', $html2, $v2);
+check(isset($v1[1], $v2[1]) && $v1[1] !== $v2[1], 'the stamp on a file address changes with the upload');
+// The page's own lists stay intact around rich text: every list item closes.
+eq(preg_match_all('~<li[ >]~', $html), substr_count($html, '</li>'), 'every list item on the page is closed');
 eq(substr_count($html, 'not included in the export'), 1, 'the one missing file says so');
 foreach (['document', 'data donation', 'questionnaire', 'instruction manual', 'unknown', 'some new tool'] as $label) {
     check(str_contains($html, '>' . $label . '<'), "task type label: $label");
@@ -223,6 +233,25 @@ $storeSetup(['format_version' => 1, 'assignment' => ['id' => 2, 'name' => 'Odd']
 [$html, $problems] = $renderStudy();
 eq($problems, [], 'an odd crate renders without warnings');
 check(str_contains($html, 'Ann') && !str_contains($html, 'href="mailto:'), 'an author with a malformed address is listed without a mail link');
+// A mail address is only an address: nothing that would pre-fill a message.
+foreach (['a?subject=x&body=y@example.org', 'a%0Abcc=z@example.org', 'a,b@example.org', 'a@example.org?cc=z@example.org'] as $addr) {
+    $storeSetup(['format_version' => 1, 'assignment' => ['id' => 2, 'name' => 'Odd']], ['@graph' => [['@id' => './', 'author' => [['@id' => '#a']]],
+        ['@id' => '#a', 'name' => 'Ann', 'contactPoint' => ['@id' => 'mailto:' . $addr]]]]);
+    [$h2] = $renderStudy();
+    check(str_contains($h2, 'Ann') && !str_contains($h2, 'mailto:'), "no mail link for the address $addr");
+}
+$storeSetup(['format_version' => 1], ['@graph' => [['@id' => './', 'author' => [['@id' => '#a']]],
+    ['@id' => '#a', 'name' => 'Ann', 'contactPoint' => ['@id' => 'mailto:ann.o+study_1@mail.example.org']]]]);
+[$h2] = $renderStudy();
+check(str_contains($h2, 'href="mailto:ann.o+study_1@mail.example.org"'), 'an ordinary address is a mail link');
+// A bare list item in a manual page's text cannot end the page's own list item.
+$storeSetup(['format_version' => 1, 'workflow' => ['tasks' => [
+    ['type' => 'instruction_manual', 'title' => 'M', 'chapters' => [['title' => 'C', 'pages' => [['title' => 'P', 'description' => '<li>x</li></li></ol></li></ol></div>']]]]],
+    ['type' => 'unknown', 'title' => 'Second task']]]]);
+[$h2] = $renderStudy();
+eq(preg_match_all('~<li[ >]~', $h2), substr_count($h2, '</li>'), 'a bare list item in rich text leaves the lists of the page balanced');
+eq(preg_match_all('~<ol[ >]~', $h2), substr_count($h2, '</ol>'), 'and its ordered lists');
+check(preg_match('~<div class="rich">x</div>~', $h2) === 1, 'the stray tags are gone, the text stays');
 check(!str_contains($html, 'javascript:'), 'a licence that is not a web address is never a link');
 check(str_contains($html, 'Lic'), 'the licence name is still shown');
 
