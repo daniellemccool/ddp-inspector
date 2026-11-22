@@ -8,13 +8,13 @@ $GLOBALS['__cfg'] = ['storage_root' => "$spRoot/root", 'default_n' => 15, 'base_
 $spDest = inst_paths()['setup'];
 
 // Render the page; any PHP warning or notice on the way is collected.
-$renderStudy = function (): array {
+$renderStudy = function (string $page = ''): array {
     $problems = [];
     set_error_handler(function (int $no, string $str, string $file, int $line) use (&$problems) {
         $problems[] = "$str @ " . basename($file) . ":$line"; return true;
     });
     $_POST = [];
-    try { $html = render_page('study.php', []); } finally { restore_error_handler(); }
+    try { $html = render_page('study.php', $page === '' ? [] : ['page' => $page]); } finally { restore_error_handler(); }
     return [$html, $problems];
 };
 $storeSetup = function (array|string $meta, ?array $crate = null, array $assets = [], ?string $warnings = null) use ($spRoot, $spDest): array {
@@ -41,7 +41,16 @@ eq($problems, [], 'empty page renders without warnings');
 check(!str_contains($html, 'not set up yet'), 'the Study page does not need a configured source');
 check(str_contains($html, 'Nothing describes this study yet.'), 'with nothing uploaded, the page says so');
 check(str_contains($html, '<a href="setup.php">Settings</a>'), 'the note links to Settings');
-check(!str_contains($html, 'What participants saw') && !str_contains($html, 'What was collected'), 'no section headings with nothing uploaded');
+check(!str_contains($html, 'class="screen"') && !str_contains($html, 'class="codebook"'), 'no screens and no codebook with nothing uploaded');
+// Study is two pages, switched by a subnav under the header.
+check(preg_match('~<nav class="subnav" aria-label="Study">.*<a href="study\.php" aria-current="page">What participants saw</a>.*<a href="study\.php\?page=collected">What was collected</a>.*</nav>~s', $html) === 1, 'the subnav names both pages, the first one current');
+[$chtml] = $renderStudy('collected');
+check(preg_match('~<a href="study\.php">What participants saw</a>.*<a href="study\.php\?page=collected" aria-current="page">What was collected</a>~s', $chtml) === 1, 'on the second page the second link is current');
+check(str_contains($chtml, 'No donation flow yet, so there is no codebook to show.'), 'the second page says its upload is missing');
+[$odd] = $renderStudy('nonsense');
+check(str_contains($odd, '<a href="study.php" aria-current="page">'), 'an unknown page value is the first page');
+$_POST = [];
+check(!str_contains(render_page('setup.php', []), 'class="subnav"'), 'other pages have no subnav');
 check(preg_match('~<h1>Study</h1>~', $html) === 1, 'the title is just "Study" without a name');
 check(preg_match('~Participants</a></li>\s*<li class="site-nav__item is-active"><a href="study.php" aria-current="true">Study</a></li>\s*<li class="site-nav__item"><a href="setup.php">Settings</a>~', $html) === 1,
       'navigation is Participants, Study, Settings, with Study current');
@@ -101,12 +110,32 @@ eq($problems, [], 'the full page renders without warnings');
 check(preg_match('~<h1><span class="eyebrow">Study</span> Example study</h1>~', $html) === 1, 'title band: Study over the study name');
 // Order: as a participant met things, then the codebook.
 $pos = [];
-foreach (['>What participants saw<', 'id="about"', 'id="consent"', 'id="privacy"', 'id="tasks"', 'id="helpdesk"', 'id="collected"'] as $marker) { $pos[] = strpos($html, $marker); }
+foreach (['id="about"', 'id="consent"', 'id="privacy"', 'id="task-1"', 'id="task-6"', 'id="helpdesk"'] as $marker) { $pos[] = strpos($html, $marker); }
 $sorted = $pos; sort($sorted);
 check(!in_array(false, $pos, true) && $pos === $sorted, 'sections are present and in order');
-foreach (['about', 'consent', 'privacy', 'tasks', 'helpdesk', 'collected'] as $id) {
-    check(str_contains($html, 'href="#' . $id . '"'), "on this page links to #$id");
+foreach (['about', 'consent', 'privacy', 'task-1', 'task-2', 'task-3', 'task-4', 'task-5', 'task-6', 'helpdesk'] as $id) {
+    check(preg_match('~<nav class="contents"[^>]*>.*href="#' . $id . '".*?</nav>~s', $html) === 1, "the contents row links to #$id");
 }
+// Each thing a participant saw is a screen: our label and title, then one
+// frame holding what the participant saw.
+$screen = fn(string $id): string => preg_match('~<section class="screen" id="' . $id . '">.*?</section>~s', $html, $m) === 1 ? $m[0] : '';
+$kinds = ['about' => 'Information page', 'consent' => 'Consent', 'privacy' => 'Privacy statement', 'task-1' => 'Task 1 of 6 · document',
+    'task-2' => 'Task 2 of 6 · data donation', 'task-3' => 'Task 3 of 6 · questionnaire', 'task-4' => 'Task 4 of 6 · instruction manual',
+    'task-5' => 'Task 5 of 6 · unknown', 'task-6' => 'Task 6 of 6 · some new tool', 'helpdesk' => 'Helpdesk page'];
+$titles = ['about' => 'About', 'consent' => 'Consent', 'privacy' => 'Privacy statement', 'task-1' => 'How to request', 'task-2' => 'Donate',
+    'task-3' => 'Survey', 'task-4' => 'How to download', 'task-5' => 'Mystery', 'task-6' => 'Later', 'helpdesk' => 'Helpdesk'];
+foreach ($kinds as $id => $kind) {
+    $sc = $screen($id);
+    // A label that would only repeat the title (Consent, Privacy statement) is left out.
+    $labelPart = $kind === $titles[$id] ? '' : '<p class="screen__kind">' . preg_quote($kind, '~') . '</p>\s*';
+    check(preg_match('~^<section class="screen" id="[^"]+">\s*' . $labelPart . '<h2>' . preg_quote($titles[$id], '~') . '</h2>\s*<div class="screen__frame">~', $sc) === 1, "screen $id: label, title, then the frame");
+    eq(substr_count($sc, 'class="screen__frame"'), 1, "screen $id has one frame");
+}
+check(str_contains($screen('consent'), '<h4>Consent</h4>') && strpos($screen('consent'), '<h4>Consent</h4>') > strpos($screen('consent'), 'screen__frame'), 'the participant' . "\x27" . 's own heading is inside the frame');
+check(strpos($screen('task-1'), 'guide.pdf') > strpos($screen('task-1'), 'screen__frame'), 'a document' . "\x27" . 's link is inside the frame');
+check(strpos($screen('task-4'), 'Open the app') > strpos($screen('task-4'), 'screen__frame') && str_contains($screen('task-4'), '<h3>On your phone</h3>'), 'a manual' . "\x27" . 's chapters and pages are inside the frame');
+check(!str_contains($html, 'class="codebook"'), 'the first page has no codebook');
+check(str_contains($html, 'From the study setup'), 'the first page says its source');
 // Rich text is sanitised; everything else is escaped.
 check(str_contains($html, '<h4>Consent</h4>') && str_contains($html, '<p>I agree</p>'), 'consent is shown formatted');
 check(!str_contains($html, 'onclick') && !str_contains($html, 'alert(1)'), 'consent carries no attributes or script');
@@ -145,10 +174,13 @@ check(isset($v1[1], $v2[1]) && $v1[1] !== $v2[1], 'the stamp on a file address c
 // The page's own lists stay intact around rich text: every list item closes.
 eq(preg_match_all('~<li[ >]~', $html), substr_count($html, '</li>'), 'every list item on the page is closed');
 eq(substr_count($html, 'not included in the export'), 1, 'the one missing file says so');
-foreach (['document', 'data donation', 'questionnaire', 'instruction manual', 'unknown', 'some new tool'] as $label) {
-    check(str_contains($html, '>' . $label . '<'), "task type label: $label");
-}
-// Codebook.
+// Codebook: the second page.
+$firstPage = $html;
+[$html, $problems] = $renderStudy('collected');
+eq($problems, [], 'the codebook page renders without warnings');
+check(!str_contains($html, 'class="screen"'), 'the second page has no screens');
+check(str_contains($html, 'From the donation flows'), 'the second page says its source');
+check(preg_match('~<nav class="contents"[^>]*>.*href="#t-tiktok-1".*?</nav>~s', $html) === 1 && str_contains($html, 'id="t-tiktok-1"'), 'its contents row links to the tables');
 $fixture = flows_parse_doc((string)file_get_contents(__DIR__ . '/fixtures/flows/tiktok/documentation.txt'));
 check(str_contains($html, h($fixture['platform_title'])), 'the codebook names the platform');
 foreach ($fixture['sections'] as $sec) {
@@ -157,6 +189,7 @@ foreach ($fixture['sections'] as $sec) {
 }
 check(preg_match('~built from commit <a href="https://github\.com/d3i-infra/data-donation-task/commit/abcdef1234567"[^>]*>abcdef1</a>~', $html) === 1, 'the build commit links to its source');
 check(str_contains($html, 'uploaded 20 Nov 2026'), 'the flow\'s upload date');
+$html = $firstPage . $html;
 check(!str_contains($html, 'No study setup yet') && !str_contains($html, 'No donation flow yet') && !str_contains($html, 'newer format') && !str_contains($html, 'could not include'), 'no notes when everything is there');
 
 // A saved study name wins over the setup's; the participant-facing title is
@@ -169,7 +202,7 @@ check(!str_contains($html, 'Shown to participants as'), 'a participant-facing ti
 
 // Without a source address the commit is text, not a link.
 $storeFlow(false);
-[$html] = $renderStudy();
+[$html] = $renderStudy('collected');
 check(str_contains($html, 'built from commit abcdef1 ·') && !str_contains($html, 'github.com/d3i-infra'), 'no source address: the commit is plain text');
 
 // --- one half only -------------------------------------------------------------
@@ -177,12 +210,12 @@ setup_remove($spDest);
 [$html, $problems] = $renderStudy();
 eq($problems, [], 'flows-only page renders without warnings');
 check(str_contains($html, 'No study setup yet, so there is no consent, instructions or tasks to show.'), 'only a flow: the setup half is one line');
-check(str_contains($html, 'What was collected') && !str_contains($html, 'id="consent"'), 'only a flow: the codebook is shown');
+check(!str_contains($html, 'id="consent"') && str_contains($renderStudy('collected')[0], 'class="codebook"'), 'only a flow: the codebook is on the second page');
 flows_remove("$spRoot/root/config/flows", 'tiktok');
 $storeSetup($meta, $crate, $assets);
 [$html, $problems] = $renderStudy();
 eq($problems, [], 'setup-only page renders without warnings');
-check(str_contains($html, 'No donation flow yet, so there is no codebook to show.'), 'only a setup: the codebook half is one line');
+check(str_contains($renderStudy('collected')[0], 'No donation flow yet, so there is no codebook to show.') && !str_contains($html, 'No donation flow yet'), 'only a setup: the second page is one line');
 check(str_contains($html, 'id="consent"'), 'only a setup: the consent is shown');
 
 // --- notes ----------------------------------------------------------------------
@@ -195,8 +228,8 @@ check(str_contains($html, 'Next could not include 1 file in the export: big-guid
 eq($storeSetup(['format_version' => 1])['ok'], true, 'an empty study setup is accepted');
 [$html, $problems] = $renderStudy();
 eq($problems, [], 'an empty study setup renders without warnings');
-check(str_contains($html, 'What participants saw'), 'empty setup: the heading is there');
-foreach (['id="about"', 'id="consent"', 'id="privacy"', 'id="tasks"', 'id="helpdesk"'] as $marker) {
+check(!str_contains($html, 'class="contents"'), 'empty setup: no contents row');
+foreach (['id="about"', 'id="consent"', 'id="privacy"', 'id="task-1"', 'id="helpdesk"'] as $marker) {
     check(!str_contains($html, $marker), "empty setup: no section $marker");
 }
 check(str_contains($html, 'This study setup holds no information pages, consent or tasks.'), 'empty setup: says it is empty');
@@ -220,7 +253,7 @@ $storeSetup(['format_version' => 1, 'assignment' => 'x', 'language' => ['en'], '
     ['@graph' => 'x']);
 [$html, $problems] = $renderStudy();
 eq($problems, [], 'wrong-typed metadata renders without warnings');
-check(str_contains($html, 'id="tasks"') && str_contains($html, '<h4>M2 <') && str_contains($html, '<h5>C</h5>'), 'wrong-typed metadata: the usable tasks and chapters are still shown');
+check(str_contains($html, 'id="task-') && str_contains($html, '<h2>M2</h2>') && str_contains($html, '<h3>C</h3>'), 'wrong-typed metadata: the usable tasks and chapters are still shown');
 check(!str_contains($html, 'href="javascript:'), 'a questionnaire link that is not http(s) is never a link');
 $storeSetup(['format_version' => 1, 'workflow' => 'x'], ['@graph' => [['@id' => './', 'author' => 'x', 'license' => 3, 'publisher' => ['@id' => ['x']], 'datePublished' => ['x']],
     'x', ['@id' => 5], ['@id' => '#a', 'name' => ['n'], 'contactPoint' => 'x']]]);

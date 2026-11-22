@@ -32,9 +32,11 @@ function asset_url(string $rel): string {
  * mark current: 'participants', 'study' or 'settings'. $heading is the page's <h1>
  * content, as HTML that is already escaped. The header follows
  * datadonation.eu's: the name over a subtitle (here the study's name), the
- * links on the right. Close the page with page_bottom().
+ * links on the right. $subnav, when given, is a section's own pages
+ * (key => [address, label]), drawn under the header as the site's section
+ * subnav with $subnavCurrent marked. Close the page with page_bottom().
  */
-function page_top(string $title, string $section, string $heading): void {
+function page_top(string $title, string $section, string $heading, array $subnav = [], string $subnavCurrent = ''): void {
     $storage = inst_root() !== null;
     $study = $storage ? trim((string)(inst_load()['study_name'] ?? '')) : '';
     $links = ['participants' => ['index.php', 'Participants']];
@@ -64,6 +66,15 @@ function page_top(string $title, string $section, string $heading): void {
     </nav>
   </div>
 </header>
+<?php if ($subnav !== []): ?>
+<nav class="subnav" aria-label="<?= h($links[$section][1] ?? 'Section') ?>">
+  <div class="subnav__inner">
+  <?php foreach ($subnav as $key => [$href, $label]): ?>
+    <a href="<?= h(url($href)) ?>"<?= $key === $subnavCurrent ? ' aria-current="page"' : '' ?>><?= h($label) ?></a>
+  <?php endforeach; ?>
+  </div>
+</nav>
+<?php endif; ?>
 <main id="main">
 <?php // The front page's band in small: the title on a line between two nodes,
       // a few of its pieces on that line, and the stepped lower edge. All of the

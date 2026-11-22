@@ -18,9 +18,9 @@
    A quiet action (remove, save one tick box) is the site's text link, and
    "optional" after a heading is the eyebrow. The parts of the first setup
    step are lines that open, each hanging on the step's line by a node: a
-   disc when the thing is there, a ring when it is not. The study page sets the
-   researcher's own texts in the body type and numbers the tasks in the
-   steps' numeral. */
+   disc when the thing is there, a ring when it is not. The study section's two pages sit under the site's
+   section subnav; each thing a participant saw is framed like a figure,
+   in one hairline, under our own label and title. */
 
 *, *::before, *::after { box-sizing:border-box; }
 html { -webkit-text-size-adjust:none; text-size-adjust:none; }
@@ -389,21 +389,41 @@ td.low::before { content:""; display:inline-block; width:var(--node); height:var
   .wrap { padding-top:0; }
 }
 
-/* --- study page: what participants saw, and the codebook ------------------ */
+/* --- study: two pages (what participants saw; the codebook) --------------- */
 h4 { margin:var(--space-24) 0 var(--space-4); font:700 1rem/1.35 var(--font-sans); color:var(--heading); }
 h5 { margin:var(--space-16) 0 var(--space-4); font:700 .9375rem/1.35 var(--font-sans); color:var(--heading); }
 h6 { margin:var(--space-12) 0 var(--space-4); font:700 .875rem/1.35 var(--font-sans); color:var(--text); }
 h2[id], h3[id] { scroll-margin-top:5rem; }
-/* The sections present, as links: the page's row in the niche under the band. */
-.onpage { display:flex; flex-wrap:wrap; align-items:center; gap:var(--space-4) var(--space-24);
-          margin:0 0 var(--space-24); font:var(--text-small); }
-.onpage__label { font:var(--text-eyebrow); letter-spacing:.12em; text-transform:uppercase; color:var(--text-muted); }
-/* With all six sections the row is too long for the niche in a narrower
-   window: there it stays an ordinary row under the band. */
-@media (min-width:1100px) and (max-width:1239px) {
-  .onpage.niche:first-child { flex-wrap:wrap; height:auto; max-width:none; margin:0 0 var(--space-24);
-                              gap:var(--space-4) var(--space-24); white-space:normal; }
-}
+/* A section's pages, under the header: white over a hairline, the current
+   one on the header's blue bar (the site's SectionSubnav). */
+.subnav { background:var(--surface); border-bottom:1px solid var(--border); }
+.subnav__inner { display:flex; flex-wrap:wrap; gap:0 var(--space-32); max-width:var(--site-width); margin:0 auto;
+                 padding:0 var(--edge); }
+.subnav a { position:relative; padding:.75rem 0 .7rem; font:var(--text-label); line-height:1.3; color:var(--text-muted);
+            text-decoration:none; }
+.subnav a::before { content:""; position:absolute; left:0; right:0; bottom:-1px; height:4px; background:var(--blue);
+                    transform:scaleX(0); transition:transform .2s ease-in-out; }
+.subnav a:hover, .subnav a:focus-visible { color:var(--blue); }
+.subnav a:hover::before, .subnav a:focus-visible::before, .subnav a[aria-current]::before { transform:scaleX(1); }
+.subnav a[aria-current] { color:var(--heading); }
+/* A page's parts as one row of links, a small dot between two (the site's
+   table of contents): no panel, no tint. */
+.contents { margin:var(--space-24) 0 var(--space-32); }
+.contents .eyebrow { margin:0 0 var(--space-8); }
+.contents ul { display:flex; flex-wrap:wrap; align-items:center; gap:var(--space-4) 0; margin:0; padding:0;
+               list-style:none; font:var(--text-small); }
+.contents li + li::before { content:""; display:inline-block; width:4px; height:4px; margin:0 10px 3px;
+                            border-radius:var(--radius-circle); background:var(--text-muted); }
+.contents + .contents { margin-top:calc(-1 * var(--space-16)); }
+/* One thing a participant saw. What it was and its title are ours; what is
+   inside the frame is theirs: one hairline, as the site frames a figure. */
+.screen { margin:0 0 var(--space-48); scroll-margin-top:5rem; }
+.screen__kind { margin:0; font:var(--text-eyebrow); letter-spacing:.12em; text-transform:uppercase; color:var(--text-muted); }
+.screen h2 { margin:6px 0 var(--space-12); font:420 1.5rem/1.2 var(--font-serif); }
+.screen__frame { max-width:48rem; padding:var(--space-24); border:1px solid var(--border); }
+.screen__frame > :first-child, .screen__frame > .rich > :first-child { margin-top:0; }
+.screen__frame > :last-child { margin-bottom:0; }
+.screen__frame h3 { margin:var(--space-24) 0 var(--space-4); }
 .overview { display:flex; align-items:flex-start; gap:var(--space-24); max-width:44rem; margin:0 0 var(--space-8); }
 .overview__logo { flex:none; max-width:96px; max-height:64px; }
 .overview p { margin:0 0 var(--space-4); }
@@ -417,17 +437,6 @@ h2[id], h3[id] { scroll-margin-top:5rem; }
 .rich pre { max-height:none; margin:0 0 var(--space-12); padding:var(--space-12) var(--space-16); border:0;
             border-left:var(--line-page) solid var(--sky); font:inherit; white-space:pre-wrap; overflow-wrap:anywhere; }
 .rich > :last-child { margin-bottom:0; }
-/* The tasks in order: numbered rows between hairlines, the kind of task in
-   the eyebrow's voice. */
-.tasks { max-width:52rem; margin:var(--space-12) 0 0; padding:0; list-style:none; counter-reset:task;
-         border-top:1px solid var(--border); }
-.task { position:relative; padding:var(--space-12) 0 var(--space-16) 2.5rem; border-bottom:1px solid var(--border);
-        counter-increment:task; }
-.task::before { content:counter(task, decimal-leading-zero); position:absolute; left:0; top:var(--space-12);
-                font:var(--text-numeral); font-size:1.125rem; line-height:1.35; color:var(--blue); }
-.task h4 { margin-top:0; }
-.task__type { margin-left:var(--space-8); font:var(--text-eyebrow); letter-spacing:.12em; text-transform:uppercase;
-              color:var(--text-muted); white-space:nowrap; }
 .manual__title, .manual__page { font-weight:700; color:var(--heading); }
 .manual { margin:var(--space-8) 0 0; padding:0; list-style:none; }
 .manual > li { display:flex; flex-wrap:wrap; align-items:flex-start; justify-content:space-between;
