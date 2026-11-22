@@ -26,3 +26,7 @@ provisioning/.venv/
 
 # Session notes for Claude Code (local only)
 CLAUDE.md
+
+# Working documents from design and planning sessions (local only)
+docs/superpowers/specs/
+docs/superpowers/plans/
