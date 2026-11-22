@@ -259,8 +259,8 @@ check(str_contains($html, 'Lic'), 'the licence name is still shown');
 setup_remove($spDest);
 $_POST = [];
 $setupHtml = render_page('setup.php', []);
-check(str_contains($setupHtml, 'Without a flow, tables keep their raw names and have no descriptions, and the Study page has no codebook.'), 'Setup: what is lost without a flow');
-check(str_contains($setupHtml, 'Without a study setup, the Study page has no consent, instructions or tasks.'), 'Setup: what is lost without a study setup');
+check(str_contains($setupHtml, 'Not added. Tables keep their raw names, and the Study page has no codebook.'), 'Setup: what is lost without a flow');
+check(str_contains($setupHtml, 'Not added. The Study page has no consent, instructions or tasks.'), 'Setup: what is lost without a study setup');
 
 $GLOBALS['__cfg'] = $GLOBALS['__cfg_saved_sp'];
 exec('rm -rf ' . escapeshellarg($spRoot));

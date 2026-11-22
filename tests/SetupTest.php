@@ -177,12 +177,10 @@ $p1 = strpos($html, 'Describe your study'); $p2 = strpos($html, 'Connect your do
 check($p1 !== false && $p2 !== false && $p3 !== false && $p1 < $p2 && $p2 < $p3, 'three steps in order');
 check(!str_contains($html, 'flow builder'), 'the page says script selector, not flow builder');
 check(str_contains($html, 'href="https://datadonation.eu/software/script-selector/" target="_blank" rel="noopener noreferrer"'), 'script selector linked');
-check(substr_count($html, 'class="optional"') >= 2, 'the step and the flows part are marked optional');
 check(preg_match('~name="action" value="remove_flow">\s*<input type="hidden" name="slug" value="tiktok">~', $html) === 1, 'each flow has a Remove form');
 check(preg_match('~value="save_name">.*name="study_name".*value="save_source">~s', $html) === 1, 'the name has its own form, before the source form');
 check(preg_match('~value="save_source">(?:(?!</form>).)*name="(study_name|cadence)"~s', $html) === 0, 'the source form holds neither name nor daily check');
 check(preg_match('~value="save_cadence">(?:(?!</form>).)*name="cadence"~s', $html) === 1, 'the daily check has its own form');
-check(!str_contains($html, 'Without a flow'), 'no "without a flow" line while a flow is stored');
 
 // A body PHP refuses (over post_max_size) arrives as a POST with nothing in
 // it. nginx lets through twice PHP's limit so that this, and not nginx's
@@ -201,7 +199,13 @@ eq($r['flash'][0]['kind'], 'ok', 'flow removal accepted');
 check(str_contains($r['flash'][0]['text'], 'TikTok'), 'removal message names the platform');
 eq(flows_load_all(), [], 'no flows left');
 $r = inst_handle_setup_post(['action' => 'remove_flow', 'csrf' => csrf_token(), 'slug' => 'tiktok'], []);
-eq($r['flash'][0]['kind'], 'error', 'removing a flow twice is an error');
+// A second click on Remove (a slow page invites one) is harmless.
+eq($r['flash'][0]['kind'], 'ok', 'removing a flow twice is harmless');
+check(str_contains($r['flash'][0]['text'], 'already removed'), 'the second flow removal says it was already removed');
+$r = inst_handle_setup_post(['action' => 'remove_flow', 'csrf' => csrf_token(), 'slug' => '../x'], []);
+eq($r['flash'][0]['kind'], 'error', 'a flow name that is not a plain one is still an error');
+$r = inst_handle_setup_post(['action' => 'remove_flow', 'csrf' => csrf_token()], []);
+eq($r['flash'][0]['kind'], 'error', 'a removal that names no flow is an error');
 
 // The study setup exported from Next is uploaded in step 01, beside the flows.
 $setupZip = $scratch2 . '-setup.zip';
@@ -211,7 +215,6 @@ make_setup_zip($setupZip, ['example/next-metadata.json' => (string)json_encode(e
 $upSetup = fn() => inst_handle_setup_post(['action' => 'upload_setup', 'csrf' => csrf_token()],
     ['setup_zip' => ['tmp_name' => $setupZip, 'error' => 0, 'name' => 'example_20261121.zip']])['flash'][0];
 $_POST = [];
-check(str_contains(render_page('setup.php', []), 'Without a study setup'), 'with no study setup, the page says what is missing');
 // It fills an empty study name and never overwrites one.
 inst_handle_setup_post(['action' => 'save_name', 'csrf' => csrf_token(), 'study_name' => ''], []);
 $r = $upSetup();
@@ -228,10 +231,6 @@ $html = render_page('setup.php', []);
 check(preg_match('~<span class="flows__name">Example study</span>\s*exported 21 Nov 2026~', $html) === 1, 'the stored study setup is listed with its export date');
 check(str_contains($html, 'href="https://next.eyra.co/" target="_blank" rel="noopener noreferrer"'), 'Next is linked');
 check(str_contains($html, 'name="action" value="remove_setup"'), 'the study setup has a Remove form');
-check(substr_count($html, 'class="optional"') >= 3, 'the step and both upload parts are marked optional');
-$ps = strpos($html, '<h3>Study setup'); $pf = strpos($html, '<h3>Donation flows');
-check($ps !== false && $pf !== false && $ps < $pf, 'the study setup part comes before the donation flows');
-check(!str_contains($html, 'Without a study setup'), 'no "without" line while a study setup is stored');
 // The two uploads are easy to mix up: each names the right place.
 $r = inst_handle_setup_post(['action' => 'upload_flow', 'csrf' => csrf_token()], ['flow_zip' => ['tmp_name' => $setupZip, 'error' => 0]]);
 eq($r['flash'][0]['kind'], 'error', 'a study setup is not accepted as a donation flow');
@@ -248,7 +247,8 @@ eq($r['flash'][0]['kind'], 'ok', 'study setup removal accepted');
 eq(setup_load(), null, 'the study setup is gone');
 eq(inst_load()['study_name'], 'Mine', 'removing the study setup keeps the study name');
 $r = inst_handle_setup_post(['action' => 'remove_setup', 'csrf' => csrf_token()], []);
-eq($r['flash'][0]['kind'], 'error', 'removing the study setup twice is an error');
+eq($r['flash'][0]['kind'], 'ok', 'removing the study setup twice is harmless');
+check(str_contains($r['flash'][0]['text'], 'already removed'), 'the second setup removal says it was already removed');
 // Before any source exists, a study setup can already be uploaded: it names
 // the study without making the instance configured.
 @unlink("$scratch2/config/instance.json");
@@ -269,5 +269,158 @@ check(inst_load() == ['study_name' => 'New'] + $oldStyle, 'saving the name chang
 inst_handle_setup_post(['action' => 'save_cadence', 'csrf' => csrf_token()], []);
 check(inst_load() == ['study_name' => 'New', 'cadence' => 'off'] + $oldStyle, 'saving the daily check changes nothing else');
 check(inst_configured(), 'the instance is still configured after both');
+
+// --- step 01 as status lines ---------------------------------------------------------
+// Each part of "Describe your study" is one line: a node, its name, its status
+// and one word. A line opens to show its explanation and controls. Lines start
+// closed; the one just acted on comes back open with its message inside.
+$slRoot = sys_get_temp_dir() . '/ddp-inspector-setup-lines-' . getmypid();
+exec('rm -rf ' . escapeshellarg($slRoot)); mkdir($slRoot, 0755, true);
+$GLOBALS['__cfg'] = ['storage_root' => "$slRoot/root", 'default_n' => 15, 'base_path' => ''];
+function render_setup_post(array $post, array $files = []): string {
+    $_GET = []; $_POST = $post + ['csrf' => csrf_token()]; $_FILES = $files; $_SERVER['REQUEST_METHOD'] = 'POST';
+    ob_start(); include __DIR__ . '/../public/setup.php'; $html = (string)ob_get_clean();
+    $_POST = []; $_FILES = []; $_SERVER['REQUEST_METHOD'] = 'GET';
+    return $html;
+}
+// [its state class, whether it is open], or null when the part is not on the page.
+$partTag = fn(string $html, string $id): ?array =>
+    preg_match('~<details class="(part part--(?:on|off))" id="' . $id . '"( open)?>~', $html, $m) === 1 ? [$m[1], ($m[2] ?? '') !== ''] : null;
+$partHtml = fn(string $html, string $id): string =>
+    preg_match('~<details class="part[^"]*" id="' . $id . '"[^>]*>.*?</details>~s', $html, $m) === 1 ? $m[0] : '';
+$aboveSteps = fn(string $html): string => (string)strstr($html, '<div class="steps">', true);
+$partIds = ['part-name', 'part-setup', 'part-flows'];
+
+// A fresh instance: three closed lines, nothing there yet.
+$_POST = [];
+$html = render_page('setup.php', []);
+$at = array_map(fn($id) => strpos($html, 'id="' . $id . '"'), $partIds);
+check(!in_array(false, $at, true) && $at[0] < $at[1] && $at[1] < $at[2], 'the three parts are there, in order');
+foreach ($partIds as $id) { eq($partTag($html, $id), ['part part--off', false], "fresh instance: $id has a ring node and is closed"); }
+check(str_contains($partHtml($html, 'part-name'), 'Not set.'), 'fresh instance: the name is not set');
+check(str_contains($partHtml($html, 'part-setup'), 'Not added. The Study page has no consent, instructions or tasks.'), 'fresh instance: what is lost without a study setup');
+check(str_contains($partHtml($html, 'part-flows'), 'Not added. Tables keep their raw names, and the Study page has no codebook.'), 'fresh instance: what is lost without a flow');
+eq(substr_count($html, 'class="optional"'), 1, '"optional" appears once, on the step');
+check(str_contains($html, 'None of this is needed to browse donations. It names the study and fills the Study page.'), 'the step says what it is for');
+check(str_contains($partHtml($html, 'part-name'), '>Set<') && str_contains($partHtml($html, 'part-setup'), '>Add<') && str_contains($partHtml($html, 'part-flows'), '>Add<'),
+      'an empty line offers Set or Add');
+foreach ($partIds as $id) {
+    $p = $partHtml($html, $id);
+    check(str_contains($p, '>Change<') && str_contains($p, '>Close<'), "$id carries the words for its other states");
+    preg_match_all('~<form[^>]*>~', $p, $forms);
+    check($forms[0] !== [] && array_filter($forms[0], fn($f) => !str_contains($f, '#' . $id . '"')) === [], "every form in $id posts back to that line");
+}
+check(str_contains($html, 'href="https://next.eyra.co/" target="_blank" rel="noopener noreferrer"'), 'Next is linked');
+check(str_contains($html, 'href="https://datadonation.eu/software/script-selector/" target="_blank" rel="noopener noreferrer"'), 'the script selector is linked');
+check(!str_contains($html, 'flow builder'), 'no "flow builder"');
+
+// Acting on a line brings it back open, with the message inside it.
+$html = render_setup_post(['action' => 'save_name', 'study_name' => 'Example study']);
+eq($partTag($html, 'part-name'), ['part part--on', true], 'after saving the name its line is open, with a filled node');
+check(str_contains($partHtml($html, 'part-name'), 'Saved ✓'), 'the message is inside the name line');
+check(preg_match('~class="(notice|warn)"~', $aboveSteps($html)) === 0, 'and not at the top of the page');
+eq($partTag($html, 'part-setup'), ['part part--off', false], 'the other lines stay closed');
+check(preg_match('~<span class="part__status">Example study</span>~', $partHtml($html, 'part-name')) === 1, 'the status is the name');
+
+$slSetup = "$slRoot/setup.zip";
+make_setup_zip($slSetup, ['example/next-metadata.json' => (string)json_encode(example_setup_meta()),
+    'example/ro-crate-metadata.json' => '{"@graph":[{"@id":"./","@type":"Dataset","name":"Example study","datePublished":"2026-11-21T17:33:42Z"}]}']);
+$html = render_setup_post(['action' => 'upload_setup'], ['setup_zip' => ['tmp_name' => $slSetup, 'error' => 0, 'name' => 'x.zip']]);
+eq($partTag($html, 'part-setup'), ['part part--on', true], 'after an upload the study setup line is open');
+check(str_contains($partHtml($html, 'part-setup'), 'Example study') && str_contains($partHtml($html, 'part-setup'), 'exported 21 Nov 2026'), 'its status names the setup and its date');
+
+// The wrong box: the error opens the line it belongs to.
+$html = render_setup_post(['action' => 'upload_flow'], ['flow_zip' => ['tmp_name' => $slSetup, 'error' => 0]]);
+eq($partTag($html, 'part-flows'), ['part part--off', true], 'an error on the flows line opens it');
+check(preg_match('~<p class="warn">[^<]*under “Study setup”~', $partHtml($html, 'part-flows')) === 1, 'the error is inside the flows line');
+check(!str_contains($aboveSteps($html), 'class="warn"'), 'and not at the top of the page');
+
+// Several flows: counted and named; each has its own Remove.
+foreach (['tiktok' => 'build_x_y_tiktok_development_2026-01-01_00-00-00.zip', 'facebook' => 'build_x_y_facebook_development_2026-01-01_00-00-00.zip'] as $slug => $build) {
+    $fz = "$slRoot/$slug-flow.zip"; @unlink($fz);
+    $phar = new PharData($fz);
+    $phar->addFromString('documentation.txt', (string)file_get_contents(__DIR__ . "/fixtures/flows/$slug/documentation.txt"));
+    $phar->addFromString($build, 'x'); unset($phar);
+    $html = render_setup_post(['action' => 'upload_flow'], ['flow_zip' => ['tmp_name' => $fz, 'error' => 0]]);
+}
+eq($partTag($html, 'part-flows'), ['part part--on', true], 'after an upload the flows line is open');
+$p = $partHtml($html, 'part-flows');
+check(str_contains($p, '2 added') && str_contains($p, 'Facebook, TikTok'), 'the flows status counts and names them');
+foreach (['tiktok', 'facebook'] as $slug) {
+    check(preg_match('~name="action" value="remove_flow">\s*<input type="hidden" name="slug" value="' . $slug . '">~', $p) === 1, "the $slug flow has its own Remove");
+}
+$_POST = [];
+$html = render_page('setup.php', []);
+foreach ($partIds as $id) { eq($partTag($html, $id), ['part part--on', false], "everything added, plain visit: $id is filled and closed"); }
+
+// Removing: the line stays open; a second click is a notice, not an error.
+$html = render_setup_post(['action' => 'remove_flow', 'slug' => 'facebook']);
+check(str_contains($partHtml($html, 'part-flows'), 'Removed the Facebook flow') && $partTag($html, 'part-flows') === ['part part--on', true], 'removing a flow reopens the flows line with the message');
+check(str_contains($partHtml($html, 'part-flows'), '1 added'), 'the count follows');
+$html = render_setup_post(['action' => 'remove_flow', 'slug' => 'facebook']);
+$p = $partHtml($html, 'part-flows');
+check(preg_match('~<p class="notice">[^<]*already removed~', $p) === 1 && !str_contains($p, 'class="warn"'), 'a second Remove is a plain notice inside the line');
+$html = render_setup_post(['action' => 'remove_setup']);
+eq($partTag($html, 'part-setup'), ['part part--off', true], 'removing the study setup reopens its line, now with a ring node');
+
+// A message that belongs to no line stays at the top, and opens nothing.
+$html = render_setup_post(['action' => 'nonsense']);
+check(preg_match('~<p class="warn">Unknown action\.</p>~', $aboveSteps($html)) === 1, 'a message that belongs to no line is at the top');
+foreach ($partIds as $id) { check(($partTag($html, $id)[1] ?? null) === false, "an unrelated message leaves $id closed"); }
+$html = render_setup_post(['action' => 'save_cadence', 'cadence' => 'daily']);
+check(str_contains($aboveSteps($html), 'new donations are checked every day'), 'a step 03 message is at the top');
+foreach ($partIds as $id) { check(($partTag($html, $id)[1] ?? null) === false, "a step 03 action leaves $id closed"); }
+
+// Every form says where it posts. A form without an action posts to the
+// current address, which after a step 01 action still carries #part-…: a
+// step 02 or 03 message would then appear at the top with the page scrolled
+// away from it.
+$_POST = [];
+$html = render_page('setup.php', []);
+preg_match_all('~<form[^>]*>~', $html, $allForms);
+check(count($allForms[0]) >= 6, 'the page has its forms');
+foreach ($allForms[0] as $formTag) { check(preg_match('~ action="setup\.php(\?part=(name|setup|flows)#part-\2)?"~', $formTag) === 1, 'a form names its target: ' . $formTag); }
+$outside = preg_replace('~<details class="part.*?</details>~s', '', $html);
+preg_match_all('~<form[^>]*>~', (string)$outside, $outerForms);
+check(count($outerForms[0]) >= 3 && array_filter($outerForms[0], fn($f) => !str_contains($f, ' action="setup.php"')) === [], 'forms outside step 01 post to the plain address');
+foreach (['name', 'setup', 'flows'] as $short) {
+    preg_match_all('~<form[^>]*>~', $partHtml($html, "part-$short"), $inner);
+    check(array_filter($inner[0], fn($f) => !str_contains($f, ' action="setup.php?part=' . $short . '#part-' . $short . '"')) === [], "forms in the $short line carry the line in the address");
+}
+// An upload PHP refuses for its size arrives with no fields at all: the line
+// is known only from the address, and the message must be inside it.
+$_GET = ['part' => 'flows']; $_POST = []; $_FILES = []; $_SERVER['REQUEST_METHOD'] = 'POST';
+$_SERVER['CONTENT_LENGTH'] = (string)(inst_ini_bytes((string)ini_get('post_max_size')) + 1000);
+ob_start(); include __DIR__ . '/../public/setup.php'; $html = (string)ob_get_clean();
+unset($_SERVER['CONTENT_LENGTH']); $_GET = []; $_SERVER['REQUEST_METHOD'] = 'GET';
+eq($partTag($html, 'part-flows')[1] ?? null, true, 'an over-size upload reopens the line it came from');
+check(preg_match('~<p class="warn">That file is larger than this workspace accepts~', $partHtml($html, 'part-flows')) === 1, 'with the too-large message inside it');
+check(!str_contains($aboveSteps($html), 'class="warn"'), 'and not at the top');
+// A line named in the address that does not exist opens nothing.
+$_GET = ['part' => 'nonsense"><b>']; $_POST = ['action' => 'nonsense', 'csrf' => csrf_token()]; $_SERVER['REQUEST_METHOD'] = 'POST';
+ob_start(); include __DIR__ . '/../public/setup.php'; $html = (string)ob_get_clean();
+$_GET = []; $_POST = []; $_SERVER['REQUEST_METHOD'] = 'GET';
+check(preg_match('~<p class="warn">Unknown action\.</p>~', $aboveSteps($html)) === 1 && !str_contains($html, 'nonsense"><b>'), 'an unknown line in the address is ignored');
+// An expired form on a line: the message is inside that line (the page scrolls there).
+$_GET = []; $_POST = ['action' => 'upload_flow', 'csrf' => 'stale']; $_FILES = []; $_SERVER['REQUEST_METHOD'] = 'POST';
+ob_start(); include __DIR__ . '/../public/setup.php'; $html = (string)ob_get_clean();
+$_POST = []; $_SERVER['REQUEST_METHOD'] = 'GET';
+check(str_contains($partHtml($html, 'part-flows'), 'That form has expired') && ($partTag($html, 'part-flows')[1] ?? null) === true, 'an expired form on a line shows its message in that line');
+// With a base path (production serves the app under /inspector) the targets follow it.
+$GLOBALS['__cfg']['base_path'] = '/inspector';
+$_POST = [];
+$html = render_page('setup.php', []);
+check(str_contains($html, ' action="/inspector/setup.php?part=flows#part-flows"') && str_contains($html, ' action="/inspector/setup.php"'), 'form targets follow the base path');
+$GLOBALS['__cfg']['base_path'] = '';
+// A study setup without a crate has no export date: its status says when it was uploaded.
+make_setup_zip($slSetup, ['example/next-metadata.json' => (string)json_encode(example_setup_meta())]);
+$html = render_setup_post(['action' => 'upload_setup'], ['setup_zip' => ['tmp_name' => $slSetup, 'error' => 0, 'name' => 'x.zip']]);
+check(preg_match('~<span class="part__when">uploaded \d{1,2} \w{3} \d{4}</span>~', $partHtml($html, 'part-setup')) === 1, 'without an export date the status says when it was uploaded');
+check(!str_contains($html, '<span class="part__when"></span>'), 'no empty date is written');
+
+// A name with markup in it is escaped in the status line too.
+$html = render_setup_post(['action' => 'save_name', 'study_name' => '<b>x</b>']);
+check(str_contains($partHtml($html, 'part-name'), '<span class="part__status">&lt;b&gt;x&lt;/b&gt;</span>') && !str_contains($html, '<b>x</b>'), 'a study name with markup is escaped in its status');
+exec('rm -rf ' . escapeshellarg($slRoot));
 
 $GLOBALS['__cfg'] = $GLOBALS['__cfg_saved_setup'];

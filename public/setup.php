@@ -9,6 +9,18 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && inst_root() !== null) {
     $flash = $tooLarge !== null ? [['kind' => 'error', 'text' => $tooLarge]]
                                 : inst_handle_setup_post($_POST, $_FILES)['flash'];
 }
+// Step 01 is three lines that open. A message about one of them is shown
+// inside that line, which comes back open; any other message stays at the top.
+$partOf = ['save_name' => 'part-name', 'upload_setup' => 'part-setup', 'remove_setup' => 'part-setup',
+           'upload_flow' => 'part-flows', 'remove_flow' => 'part-flows'];
+$posted = is_string($_POST['action'] ?? null) ? $_POST['action'] : '';
+// A body PHP refused for its size arrives with no fields, so the line it came
+// from also travels in the address (?part=…), which survives that.
+$fromAddress = in_array($_GET['part'] ?? null, ['name', 'setup', 'flows'], true) ? 'part-' . $_GET['part'] : null;
+$openPart = $flash === [] ? null : ($posted !== '' ? ($partOf[$posted] ?? null) : $fromAddress);
+$showFlash = function (array $flash): void {
+    foreach ($flash as $f) { echo '<p class="' . ($f['kind'] === 'ok' ? 'notice' : 'warn') . '">' . h($f['text']) . "</p>\n"; }
+};
 $storageMode = inst_root() !== null;
 $flows = $storageMode ? flows_load_all() : [];
 $studySetup = $storageMode ? setup_load() : null;
@@ -20,74 +32,103 @@ $status = inst_status();
 if ($storageMode) { csrf_token(); }
 ?>
 <?php page_top('set up', 'settings', 'Set up this inspector'); ?>
-  <?php foreach ($flash as $f): ?>
-    <p class="<?= $f['kind'] === 'ok' ? 'notice' : 'warn' ?>"><?= h($f['text']) ?></p>
-  <?php endforeach; ?>
+  <?php if ($openPart === null) { $showFlash($flash); } ?>
   <?php if (!$storageMode): ?>
     <p class="notice">This instance is configured by files on disk (developer mode).</p>
   <?php else: ?>
 
   <?php
   $ext = ' target="_blank" rel="noopener noreferrer"';
-  $optional = '<span class="optional">optional</span>';
+  // Every form names where it posts. One inside a line of step 01 posts to
+  // that line (the page scrolls back to it); every other form posts to the
+  // plain address, never to whatever fragment the address bar still holds.
+  $self = h(url('setup.php'));
+  $toPart = fn(string $short): string => h(url('setup.php?part=' . $short)) . '#part-' . $short;
+  // The opening tag of one line of step 01: a filled node when the thing is
+  // there, a ring when it is not; open when it was just acted on.
+  $partOpen = fn(string $id, bool $there): string =>
+      '<details class="part part--' . ($there ? 'on' : 'off') . '" id="' . $id . '"' . ($openPart === $id ? ' open' : '') . '>';
+  // The word at the end of a line: what a click will let you do. CSS shows
+  // the one that fits (Close while open, else the first or the second).
+  $partWords = fn(string $add): string =>
+      '<span class="part__word part__word--add">' . $add . '</span><span class="part__word part__word--change">Change</span>'
+      . '<span class="part__word part__word--close">Close</span>';
+  $studyName = trim((string)($inst['study_name'] ?? ''));
+  $stored = $studySetup !== null ? setup_summary($studySetup) : null;
   ?>
   <div class="steps">
   <section class="step">
-  <h2><span class="step__num">01</span> Describe your study <?= $optional ?></h2>
-  <p class="meta">Nothing in this step is needed to browse donations.</p>
-  <form method="post">
-    <?= csrf_field() ?><input type="hidden" name="action" value="save_name">
-    <label class="field">Study name
-      <input name="study_name" value="<?= h((string)($inst['study_name'] ?? '')) ?>"></label>
-    <button>Save<?= go_mark() ?></button>
-  </form>
+  <h2><span class="step__num">01</span> Describe your study <span class="optional">optional</span></h2>
+  <p class="meta">None of this is needed to browse donations. It names the study and fills the Study page.</p>
 
-  <h3>Study setup <span class="part__from">from <a href="https://next.eyra.co/"<?= $ext ?>>Next</a></span> <?= $optional ?></h3>
-  <p class="meta">What participants saw: information pages, consent, instructions and tasks. In Next, open the study, open the ⋮ menu next to Publish and choose Export, then upload that zip here.</p>
-  <?php if ($studySetup !== null): ?>
-    <ul class="flows">
-      <?php $stored = setup_summary($studySetup); ?>
-      <li><span><span class="flows__name"><?= h($stored['name']) ?></span> <?= h($stored['when']) ?></span>
-        <form method="post">
-          <?= csrf_field() ?><input type="hidden" name="action" value="remove_setup">
-          <button class="quiet">Remove</button>
-        </form></li>
-    </ul>
-  <?php else: ?>
-    <p class="meta">Without a study setup, the Study page has no consent, instructions or tasks.</p>
-  <?php endif; ?>
-  <form method="post" enctype="multipart/form-data" class="toolbar">
-    <?= csrf_field() ?><input type="hidden" name="action" value="upload_setup">
-    <input type="file" name="setup_zip" accept=".zip" required>
-    <button>Upload setup<?= go_mark() ?></button>
-  </form>
+  <div class="parts">
+  <?= $partOpen('part-name', $studyName !== '') ?>
+    <summary><span class="part__name">Study name</span> <span class="part__status"><?= $studyName !== '' ? h($studyName) : 'Not set.' ?></span> <?= $partWords('Set') ?></summary>
+    <div class="part__body">
+      <?php if ($openPart === 'part-name') { $showFlash($flash); } ?>
+      <form method="post" action="<?= $toPart('name') ?>" class="toolbar toolbar--field">
+        <?= csrf_field() ?><input type="hidden" name="action" value="save_name">
+        <label class="field">Study name
+          <input name="study_name" value="<?= h($studyName) ?>"></label>
+        <button>Save<?= go_mark() ?></button>
+      </form>
+    </div>
+  </details>
 
-  <h3>Donation flows <span class="part__from">from the <a href="https://datadonation.eu/software/script-selector/"<?= $ext ?>>script selector</a></span> <?= $optional ?></h3>
-  <p class="meta">What was collected: the tables and what each variable means. Upload the zip exactly as the script selector downloaded it, one per platform.</p>
-  <?php if ($flows): ?>
-    <ul class="flows">
-    <?php foreach ($flows as $slug => $doc): ?>
-      <li><span><span class="flows__name"><?= h($doc['platform_title']) ?></span> <?= count($doc['sections']) ?> data tables</span>
-        <form method="post">
-          <?= csrf_field() ?><input type="hidden" name="action" value="remove_flow">
-          <input type="hidden" name="slug" value="<?= h((string)$slug) ?>">
-          <button class="quiet">Remove</button>
-        </form></li>
-    <?php endforeach; ?>
-    </ul>
-  <?php else: ?>
-    <p class="meta">Without a flow, tables keep their raw names and have no descriptions, and the Study page has no codebook.</p>
-  <?php endif; ?>
-  <form method="post" enctype="multipart/form-data" class="toolbar">
-    <?= csrf_field() ?><input type="hidden" name="action" value="upload_flow">
-    <input type="file" name="flow_zip" accept=".zip" required>
-    <button>Upload flow<?= go_mark() ?></button>
-  </form>
+  <?= $partOpen('part-setup', $stored !== null) ?>
+    <summary><span class="part__name">Study setup</span> <span class="part__status"><?php if ($stored !== null): ?><?= h($stored['name']) ?><?php if ($stored['when'] !== ''): ?> <span class="part__when"><?= h($stored['when']) ?></span><?php endif; ?><?php else: ?>Not added. The Study page has no consent, instructions or tasks.<?php endif; ?></span> <?= $partWords('Add') ?></summary>
+    <div class="part__body">
+      <?php if ($openPart === 'part-setup') { $showFlash($flash); } ?>
+      <p>What participants saw: information pages, consent, instructions and tasks. It fills the first half of the Study page.</p>
+      <p class="meta">From <a href="https://next.eyra.co/"<?= $ext ?>>Next</a>: open the study, open the ⋮ menu next to Publish and choose Export.</p>
+      <?php if ($stored !== null): ?>
+        <ul class="flows">
+          <li><span><span class="flows__name"><?= h($stored['name']) ?></span> <?= h($stored['when']) ?></span>
+            <form method="post" action="<?= $toPart('setup') ?>">
+              <?= csrf_field() ?><input type="hidden" name="action" value="remove_setup">
+              <button class="quiet">Remove</button>
+            </form></li>
+        </ul>
+      <?php endif; ?>
+      <form method="post" action="<?= $toPart('setup') ?>" enctype="multipart/form-data" class="toolbar">
+        <?= csrf_field() ?><input type="hidden" name="action" value="upload_setup">
+        <input type="file" name="setup_zip" accept=".zip" required>
+        <button>Upload setup<?= go_mark() ?></button>
+      </form>
+    </div>
+  </details>
+
+  <?= $partOpen('part-flows', $flows !== []) ?>
+    <summary><span class="part__name">Donation flows</span> <span class="part__status"><?php if ($flows): ?><?= count($flows) ?> added <span class="part__when"><?= h(implode(', ', array_column($flows, 'platform_title'))) ?></span><?php else: ?>Not added. Tables keep their raw names, and the Study page has no codebook.<?php endif; ?></span> <?= $partWords('Add') ?></summary>
+    <div class="part__body">
+      <?php if ($openPart === 'part-flows') { $showFlash($flash); } ?>
+      <p>What was collected: the tables and what each variable means. They title the tables and fill the codebook on the Study page.</p>
+      <p class="meta">From the <a href="https://datadonation.eu/software/script-selector/"<?= $ext ?>>script selector</a>: one zip per platform.</p>
+      <?php if ($flows): ?>
+        <ul class="flows">
+        <?php foreach ($flows as $slug => $doc): ?>
+          <li><span><span class="flows__name"><?= h($doc['platform_title']) ?></span> <?= count($doc['sections']) ?> data tables</span>
+            <form method="post" action="<?= $toPart('flows') ?>">
+              <?= csrf_field() ?><input type="hidden" name="action" value="remove_flow">
+              <input type="hidden" name="slug" value="<?= h((string)$slug) ?>">
+              <button class="quiet">Remove</button>
+            </form></li>
+        <?php endforeach; ?>
+        </ul>
+      <?php endif; ?>
+      <form method="post" action="<?= $toPart('flows') ?>" enctype="multipart/form-data" class="toolbar">
+        <?= csrf_field() ?><input type="hidden" name="action" value="upload_flow">
+        <input type="file" name="flow_zip" accept=".zip" required>
+        <button>Upload flow<?= go_mark() ?></button>
+      </form>
+    </div>
+  </details>
+  </div>
   </section>
 
   <section class="step">
   <h2><span class="step__num">02</span> Connect your donations</h2>
-  <form method="post" enctype="multipart/form-data">
+  <form method="post" action="<?= $self ?>" enctype="multipart/form-data">
     <?= csrf_field() ?><input type="hidden" name="action" value="save_source">
     <h3>Where are your donations stored?</h3>
     <div class="choices">
@@ -145,11 +186,11 @@ if ($storageMode) { csrf_token(); }
 
   <section class="step">
   <h2><span class="step__num">03</span> Fetch</h2>
-  <form method="post">
+  <form method="post" action="<?= $self ?>">
     <?= csrf_field() ?><input type="hidden" name="action" value="check_fetch">
     <button>Check connection and fetch donations<?= go_mark() ?></button>
   </form>
-  <form method="post" class="toolbar">
+  <form method="post" action="<?= $self ?>" class="toolbar">
     <?= csrf_field() ?><input type="hidden" name="action" value="save_cadence">
     <label class="check"><input type="checkbox" name="cadence" value="daily" <?= ($inst['cadence'] ?? '') === 'daily' ? 'checked' : '' ?>>
       Check for new donations automatically every day</label>
