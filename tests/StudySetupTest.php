@@ -160,7 +160,7 @@ check(glob("$dest.new") === [], 'a corrupt zip leaves no .new directory');
 // --- the uploaded file's name ------------------------------------------------------
 $r = setup_ingest_upload("$ssRoot/good.zip", $dest, str_repeat('a', 199) . 'é.zip');
 eq($r['ok'], true, 'a long non-ASCII file name does not stop the upload');
-check(json_encode(setup_load()['uploaded']['zip_name']) !== false && mb_check_encoding((string)setup_load()['uploaded']['zip_name'], 'UTF-8'),
+check(json_encode(setup_load()['uploaded']['zip_name']) !== false && preg_match('//u', (string)setup_load()['uploaded']['zip_name']) === 1,
       'the kept file name is cut on a character boundary');
 eq(setup_ingest_upload("$ssRoot/good.zip", $dest, "bad\xff\xfename.zip")['ok'], true, 'a file name that is not UTF-8 does not stop the upload');
 
