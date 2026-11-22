@@ -1,7 +1,7 @@
 # DDP Inspector: study documentation (Setup regrouped, study setup upload, Study page) (design)
 
 **Date:** 2026-11-21
-**Status:** draft, awaiting approval
+**Status:** approved 2026-11-22 (builder check done)
 **Builds on:** `2026-07-29-ddp-inspector-catalog-component-design.md` (Setup
 wizard, flow uploads, refresh machinery) and the D3I look (PR #16/#17:
 `page_top()`, the steps, `style.css`).
