@@ -5,6 +5,7 @@ require_once __DIR__ . '/Sample.php';
 require_once __DIR__ . '/Instance.php';
 require_once __DIR__ . '/Flows.php';
 require_once __DIR__ . '/StudySetup.php';
+require_once __DIR__ . '/RichText.php';
 require_once __DIR__ . '/Analysis.php';
 require_once __DIR__ . '/Study.php';
 require_once __DIR__ . '/StudyDb.php';
